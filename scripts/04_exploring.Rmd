@@ -1,0 +1,549 @@
+---
+title: "Exploratory Data Analysis of Blue Water Baltimore's Tree Giveaway data (2013 - 2023)"
+author: "Eduardo Marin (with Dexter H Locke)"
+date: "`r format(Sys.time())`"
+output:
+  html_document:
+    theme: spacelab
+    code_folding: hide
+    fig_width: 8
+    fig_height: 7
+    fig_caption: true
+    toc: true
+    toc_float: true
+    self_contained: true
+editor_options: 
+  chunk_output_type: console
+  markdown: 
+    wrap: 72
+---
+### General Outline (with objectives)
+
+**WHEN**
+
+-   Year Map Overview (each color based off of year, plus Shiny app
+    (filter for years))\
+-   Stacked Bar Chart of Each Year (each season as different colors)
+
+**WHERE**
+
+-   Three Jurisdictions Map Overview (different colors based off of the
+    three tree giveaway distribution)\
+-   Bar Chart (different colors based on the locations with count)\
+-   Baltimore Neighborhood Map Overview (different colors based on
+    density of the plantings)\
+-   Bar Chart Highlighting Top 10 Planted Neighborhoods (different
+    colors based on neighborhood), plus aggregating the rest as Other\
+-   Census Tract Overview in Baltimore (different colors based on
+    density of the plantings)\
+-   Census Tract Overview in Baltimore County (different colors based on
+    density of the plantings)\
+-   Bar Graph highlighting Top 10 Locations Planted (Cleaned)
+
+**WHAT**
+
+-   Map Overview of Top 10 Species (each species as a different color)\
+-   Stacked Bar Chart (Highlighting the different species for each one)\
+-   Map Overview of Top 5 Species each Season (each species as a
+    different color, RShiny)\
+-   Bar Graph of Top 5 Species for Each Year (each species as a color)
+
+**WHO**
+
+-   Map Overview with Planting to Redline Zones (RShiny with Year)\
+-   Map Overview with Planting to CBT Zones (RShiny with Year)
+
+```{r message=FALSE, include=FALSE}
+
+# List all of your packages here
+
+knitr::opts_chunk$set(echo = TRUE)
+
+packs <-c(
+            'janitor'    # cleans things up, also pipe-friendly cross-tabulations
+           , 'sf'         # for spatial data support
+          , 'tidyverse'  # cuz
+          , 'tidylog'    # prints out what was done in dplyr and tidyr
+          , 'magrittr'   # for the pipe
+          , 'mapview'    # web maps for zooming and panning around
+          #, 'beepr'      # makes noise when things are done!
+          , 'tictoc'     # timing things.
+          , 'raster'
+          # , 'doParallel' # does what is says! PARALLEL
+          # 'broom.mixed',# tidiers for mixed models AND nlme::gls()
+          # , 'lubridate'   # DATES!
+          , 'tidycensus' # tidy census package
+          , 'tidygeocoder' # geo coding
+          , 'leaflet' #creating the interactive mapping elements (more specific)
+          , 'shiny'
+          , 'leafsync'  # linked maps
+          , 'DT' 
+          )     
+
+# IF the packages in 'packs' are not already installed, install them
+# OTHERWISE do NOTHING
+if (length(setdiff(packs, rownames(installed.packages()))) > 0) {
+install.packages(setdiff(packs, rownames(installed.packages())))
+}
+
+# lapply(packs, library, character.only = TRUE)
+# this actually loads them with library(package_name)
+vapply(packs, library, character.only = TRUE, logical(1), logical.return = TRUE, quietly = TRUE)
+
+
+# # for tidycensus
+# setting for get_acs
+census_api_key('58fc555c77c229747ade7d9fe50e7c71297cf91a', install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+options(tigris_use_cache = TRUE)
+```
+
+```{r include=FALSE}
+## B get census data
+
+vars21 <- tidycensus::load_variables('acs5', year = 2021)
+# vars21 |> View()
+
+my_vars <- c(  'pop'      = 'B01001_001'
+             , 'medhhinc' = 'B19013_001'
+             )
+
+(MD <-
+  tidycensus::get_acs(
+      geography = 'state'
+    , state = 'MD'
+    , variables = my_vars
+    , year = 2021
+    , geometry = TRUE
+    , output = 'wide'
+    , moe_level = 95
+    ) |>
+   st_transform(crs = st_crs(4326)))
+
+(cbg <-
+  tidycensus::get_acs(
+      geography = 'block group'
+    , state = 'MD'
+    , county = c('Baltimore City', 'Baltimore County')
+    , variables = my_vars
+    , year = 2021
+    , geometry = TRUE
+    , output = 'wide'
+    , moe_level = 95
+    ) |>
+    st_transform(crs = st_crs(MD)) |>
+    mutate(jurisdiction = case_when(
+      str_like(GEOID, '24510%') ~ "Baltimore City",
+      str_like(GEOID, '24005%') ~ "Baltimore County",
+      TRUE ~ "Neither"
+    )))
+
+```
+
+```{r message=FALSE, include=FALSE}
+
+# Tree Tribble
+species_data <- 
+  tribble(
+  ~common_name,        ~genus_species,            ~itree,
+  "Hackberry",         "Celtis occidentalis",     "CEOC",
+  "Willow Oak",        "Quercus phellos",         "QUPH",
+  "Black Gum",         "Nyssa sylvatica",         "NYSY",
+  "Eastern Redbud",    "Cercis canadensis",       "CECA",
+  "Sassafras",         "Sassafras albidum",       "SAAL",
+  "Chestnut Oak",      "Quercus prinus",          "QUPR",
+  "Eastern Red Cedar", "Juniperus virginiana",    "JUVI",
+  "Bald Cypress",      "Taxodium distichum",      "TADI",
+  "Black Oak",         "Quercus velutina",        "QUVE",
+  "American Holly",    "Ilex opaca",              "ILOP",
+  "Sweetbay Magnolia", "Magnolia virginiana",     "MAVI",
+  "American Sweetgum", "Liquidambar styraciflua", "LIST",
+  "Bur Oak",           "Quercus macrocarpa",      "QUMA1",
+  "Black Chokeberry",  "Aronia melanocarpa",      "ARME6",
+  "Blackhaw Viburnum", "Viburnum prunifolium",    "VIPR",
+  "Gingko",            "Ginkgo biloba",            "GIBI",
+  "American Persimmon", "Diospyros virginiana",    "DIVI",
+  "Flowering Cherry",   "Prunus yedoensis",        "PRYE",
+  "Post Oak",           "Quercus stellata",        "QUST",
+  "Chinkapin Oak",      "Quercus muehlenbergii",   "QUMU",
+  "Tulip Poplar",       "Liriodendron tulipifera", "LITU",
+  "Shortleaf Pine",     "Pinus echinata",          "PIEC",
+  "Eastern White Pine", "Pinus americana",         "PIST",
+  "Yellow Birch",       "Betula alleghaniensis",   "BEAL2",
+  "American Yellowwood","Cladrastis luteau",       "CLLU",
+  "Smooth Service Berry","Amelanchier laevis",     "AMLA",
+  "Boxelder Maple",    "Acer negundo",             "ACNE",
+  "American Linden",   "Tilia americana",          "TIAMRE",
+  "American Plum",     "Prunus americana",         "PRAM"
+  )
+  
+#Quick change
+quick <- c(1,2,3)
+
+# Loading data
+bwb_total_giveaway <-
+  read_csv("output_data/bwb_giveaway_total_final_2024-05-13.csv") |>
+  filter(!is.na(lat)) |> #Good double check
+  st_as_sf(coords = c("long","lat"), crs = 4326) |> 
+  st_join(cbg) |> 
+  mutate(common_name = case_when(
+    common_name == "Boxelder" ~ "Boxelder Maple",
+    common_name == "Yoshino Flowering Cherry" ~ "Flowering Cherry",
+    common_name == "Black Tupelo" ~ "Black Gum",
+    common_name == "Chinquapin" ~ "Chinkapin Oak",
+    common_name == "Breakfast" ~ "Other",
+    common_name == "Blackhaw Vibernum" ~ "Blackhaw Viburnum",
+    common_name == "Ginkgo" ~ "Gingko",
+    TRUE ~ common_name
+  )) |>
+  filter(address != "822 Montpellier") |> 
+  left_join(species_data, by = "common_name") |>
+  mutate(
+    genus_species = coalesce(genus_species.x, genus_species.y),
+    itree = coalesce(itree.x, itree.y)
+  ) |>
+  dplyr::select(-genus_species.x, -genus_species.y, -itree.x, -itree.y) |>
+  left_join(species_data, by = "genus_species") |>
+  mutate(
+    common_name = coalesce(common_name.x, common_name.y),
+    itree = coalesce(itree.x, itree.y)
+  ) |>
+  dplyr::select(-common_name.x, -common_name.y, -itree.x, -itree.y) |>
+ mutate(genus_species = ifelse(common_name == "Other", "Other", genus_species),
+       itree = ifelse(common_name == "Other", NA_character_, itree))
+         
+```
+
+# 1 When
+
+```{r eval=FALSE, include=FALSE}
+# Defining the UI for Shiny component
+year_ui <- fluidPage(
+  titlePanel("BWB Tree Giveaway Interactive Map with Year Filter"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("year", "Select Year:", choices = unique(bwb_total_giveaway$year))
+    ),
+    mainPanel(
+      leafletOutput("interactive_map")
+    )
+  )
+)
+
+# Creating the color palette of the webmap
+
+# Creating the webmap with the Shiny component
+server <- function(input, output, session) {
+  filtered_data <- reactive({
+    bwb_total_giveaway |> filter(year == input$year)
+  })
+  
+  output$interactive_map <- renderLeaflet({
+    leaflet() |>
+      addProviderTiles(providers$CartoDB.Positron) |>
+      addCircleMarkers(
+        data = filtered_data(),
+        radius = 2,
+        fillOpacity = 0.1,
+        color = "#2E6F40",
+        popup = ~paste(
+          "<b>Year:</b>", year, "<br>",
+          "<b>Season:</b>", season, "<br>",
+          "<b>Date:</b>", date, "<br>",
+          "<b>Common Name:</b>", common_name, "<br>",
+          "<b>Scientific Name:</b>", genus_species, "<br>",
+          "<b>Address:</b>", address, "<br>",
+          "<b>City:</b>", city, "<br>",
+          "<b>State:</b>", state, "<br>",
+          "<b>Zip Code:</b>", zip_code, "<br>"
+        )
+      )
+  })
+}
+
+# Run the application
+shinyApp(year_ui, server)
+
+
+# General map of all points
+general_map <- 
+  leaflet() |>
+  addProviderTiles(providers$CartoDB.Positron) #the basemap
+
+# Customizing the general map
+general_map <- 
+  general_map |>
+  addCircleMarkers(
+  data = bwb_total_giveaway,
+  radius = 2, 
+  fillOpacity = 0.1,
+  color = "#2E6F40",
+  popup = ~paste(
+    "<b>Year:</b>", year, "<br>",
+    "<b>Season:</b>", season, "<br>",
+    "<b>Date:</b>", date, "<br>",
+    "<b>Common Name:</b>", common_name, "<br>",
+    "<b>Scientific Name:</b>", genus_species, "<br>",
+    "<b>Address:</b>", address, "<br>",
+    "<b>City:</b>", city, "<br>",
+    "<b>State:</b>", state, "<br>",
+    "<b>Zip Code:</b>", zip_code, "<br>"
+  )
+    )
+
+# Displaying the map
+general_map
+```
+
+## A General Map
+
+# 3 Performing the a-spatial double checks
+
+## A Time
+
+```{r}
+# Playing with year (result is season wide)
+bwb_total_giveaway |> 
+  st_drop_geometry() |>
+  tabyl(year, season) |>
+  as_tibble() |>
+  DT::datatable()
+  
+# Same data, different shape (result is time long)
+(giveaway_counts_season_year <-
+  bwb_total_giveaway |> 
+  st_drop_geometry() |>
+  group_by(year, season) |>
+  count())
+
+# # Graphing this giveaway counts
+# giveaway_counts_season_year |>
+#   ggplot(aes(x = year, y = n, color = season)) +
+#   geom_point() +
+#   # geom_line() +
+#   geom_smooth(method = "lm") +
+#   geom_smooth()
+
+#geom_sf is for vector spatial data, data is the first argument, matters when you have layers. In terms of the ggplot, aes defines the conditions of the graph (let's you pass it through each point). geom_point makes the point graph. ggplot can be seen as global 
+
+#NULL Lets you always rull
+
+# Graph about time
+giveaway_counts_season_year |>
+  ggplot(aes(x = as.factor(year), y = n, color = season, group = season)) +
+  geom_point() +
+  geom_line() +
+  labs(
+      title = "Number of Tree Giveaways by Year"
+    , subtitle = "The Blue Water Baltimore data is also looking at specific seasons"
+    , caption = "Testing"
+    , x = "Year"
+    , y = "Number of Trees Given Away"
+  ) +
+  theme_bw(16) +
+  theme(legend.position = c(.1, .7)) +
+  NULL
+  
+
+```
+
+## B Location
+
+```{r}
+
+glimpse(bwb_total_giveaway)
+
+(location_counts <- 
+  bwb_total_giveaway |>
+  st_drop_geometry() |>
+  tabyl(giveaway_location) |> 
+  as_tibble() |> 
+  arrange(desc(n))
+)
+
+location_counts |> 
+  ggplot(aes(n, reorder(giveaway_location, n))) + # pushes the bars in the desc order
+  geom_col() +
+  theme_bw(16) +
+  labs(y = 'Giveaway Location'
+       , x = 'Number of trees') +
+  NULL
+
+```
+
+## C Species
+
+```{r}
+# 2x check
+bwb_total_giveaway |>
+  filter(is.na(common_name) | is.na(genus_species))
+
+#Making that
+bwb_total_giveaway |>
+  filter(is.na(common_name) & is.na(genus_species))
+
+#Genus Species
+bwb_total_giveaway |>
+  st_drop_geometry() |>
+  tabyl(genus_species) 
+
+#Common Name
+(giveaway_counts_common_name <-
+  bwb_total_giveaway |>
+  st_drop_geometry() |>
+  tabyl(common_name) |>
+  as_tibble() |>
+  arrange(desc(n)) |> 
+  mutate(group = rep(c("common", "rare"), each = 42))
+)
+
+
+giveaway_counts_common_name |> 
+  ggplot(aes(n, reorder(common_name, n))) + # pushes the bars in the desc order
+  geom_col() +
+  theme_bw(10) +
+  labs(y = 'Common Name'
+       , x = 'Number of trees'
+       , title = 'Which tree species were most and least common?'
+       , subtitle = paste0('lots of Serviceberry... they make up '
+                           , round(giveaway_counts_common_name |> slice(1) |> pull(percent) * 100, 2)
+                           , ' percent of all giveaways')
+       ) +
+  facet_wrap(~group, scales = 'free') +
+  NULL
+
+```
+
+## D Making the count by city
+
+```{r}
+(giveaway_counts_city_season <-
+  bwb_total_giveaway |>
+  st_drop_geometry() |>
+  group_by(city, year, season) |>
+  count() |>
+  as_tibble() |>
+  arrange(desc(n))
+)
+
+giveaway_counts_city_season |>
+  ggplot(aes(year, n, color = season, group = season)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~city) +
+  theme_bw(16) +
+  NULL
+
+## 
+  bwb_total_giveaway |>
+  st_drop_geometry() |>
+  group_by(zip_code, year, season) |>
+  count() |>
+  as_tibble() |>
+  arrange(desc(n)) |>
+  ggplot(aes(year, n, color = season, group = season)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~zip_code) +
+  theme_bw(16) +
+  NULL
+
+## Comparing to county data
+  bwb_total_giveaway |>
+  st_drop_geometry() |>
+  group_by(county, year, season) |>
+  count() |>
+  as_tibble() |>
+  arrange(desc(n)) |>
+  ggplot(aes(year, n, color = season, group = season)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~county) +
+  theme_bw(16) +
+  theme(axis.text.x = element_text(angle = 90, vjust = .5)) +
+  NULL
+  
+```
+
+# 4 maps and graphs to make
+
+```{r, fig.height=4}
+
+# Species over time
+# graph with time on horizontal
+# vertical is amount
+# color for season
+# lines per species (too many)
+bwb_total_giveaway |> 
+  st_drop_geometry() |> 
+  group_by(year, season, common_name) |> 
+  count() |> # summary() # n ranges from 1 to 192
+  filter(n > 10) |> 
+  ggplot(aes(year, n, group = common_name, color = season)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~common_name)
+
+
+# map for the top five species
+five_most_common_species <- 
+  bwb_total_giveaway |> 
+  st_drop_geometry() |> 
+  group_by(common_name) |> 
+  count() |> 
+  ungroup() |> 
+  arrange(desc(n)) |> 
+  slice(1:10)
+
+bwb_total_giveaway |> 
+  filter(common_name %in% five_most_common_species$common_name) |> 
+  mapview()
+
+
+bwb_total_giveaway |> 
+  filter(common_name %in% five_most_common_species$common_name) |> 
+  mapview(zcol = 'common_name')
+
+
+bwb_total_giveaway |> 
+  filter(common_name %in% five_most_common_species$common_name) |> 
+  mapview(zcol = 'common_name', layer.name = "Common Name")
+
+
+bwb_total_giveaway |> 
+  filter(common_name == 'Serviceberry') |> 
+  mapview(zcol = 'year', layer.name = "Common Name")
+
+```
+
+# old sandbox
+
+\`\`\`{r eval=FALSE, message=FALSE, include=FALSE} \# 5 augment tree
+data with census
+
+bwb_total_giveaway_aug \<- bwb_total_giveaway \|\> st_join(cbg \|\>
+tidylog::select(-NAME) )
+
+bwb_total_giveaway_aug \|\> glimpse()
+
+bwb_total_giveaway_aug \|\> mapview(zcol = 'medhhincE')
+
+# Create an interactive map
+
+bwb_total_giveaway \|\> mapview()
+
+# Messing with data
+
+bwb_total_giveaway \|\> filter(year == 2015) \|\> mapview()
+
+# Messing with data
+
+bwb_total_giveaway \|\> mapview(zcol = "year")
+
+# Display the map
+
+map_giveaway
+
+#Final squeaky cleaned geocoded and get the GItHub resolved, and by the
+wenday. Email how you going. Sit next. Finish it by next Monday:
+Geocoding and GitHUb Meet by Zoom Tuesdya from 9 to 11

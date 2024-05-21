@@ -1,0 +1,92 @@
+---
+title: "02_double_checks"
+author: "Eduardo (with Dexter H Locke, PhD)"
+date: "`r format(Sys.time())`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# 0 load libraries and read in data----
+```{r message=FALSE}
+
+# List all of your packages here
+
+knitr::opts_chunk$set(echo = TRUE)
+
+packs <-c(
+            'janitor'    # cleans things up, also pipe-friendly cross-tabulations
+           , 'sf'         # for spatial data support
+          , 'tidyverse'  # cuz
+          , 'tidylog'    # prints out what was done in dplyr and tidyr
+          , 'magrittr'   # for the pipe
+          , 'mapview'    # web maps for zooming and panning around
+          #, 'beepr'      # makes noise when things are done!
+          , 'tictoc'     # timing things.
+          , 'raster'
+          # , 'doParallel' # does what is says! PARALLEL
+          # 'broom.mixed',# tidiers for mixed models AND nlme::gls()
+          # , 'lubridate'   # DATES!
+          # , 'zipcode'   # Implements zipcode information
+          , 'tidygeocoder' # geo coding
+          , 'openxlsx' #writing Excels
+          )     
+
+# IF the packages in 'packs' are not already installed, install them
+# OTHERWISE do NOTHING
+if (length(setdiff(packs, rownames(installed.packages()))) > 0) {
+install.packages(setdiff(packs, rownames(installed.packages())))
+}
+
+# lapply(packs, library, character.only = TRUE)
+# this actually loads them with library(package_name)
+vapply(packs, library, character.only = TRUE, logical(1), logical.return = TRUE, quietly = TRUE)
+```
+
+
+#1 Read in and double checks
+```{r}
+
+giveaway_total <-
+  read_csv("output_data/giveaway_total_bwb_2024-04-15.csv") 
+
+glimpse(giveaway_total)
+
+view(giveaway_total)
+
+#Cross tabulation, year by season
+giveaway_total |>
+  tabyl(year, season)
+
+#Double check giveaway location
+giveaway_total |>
+  tabyl(giveaway_location)
+
+#Double check giveaway location and year
+giveaway_total |>
+  tabyl(giveaway_location, year)
+
+#Double check giveaway location and year
+giveaway_total |>
+  tabyl(year, giveaway_location)
+
+#Double check city and zip_code
+giveaway_total |>
+  tabyl(zip_code, city)
+
+#Gives you the city with the species and percentage
+giveaway_total |>
+  tabyl(common_name, city) |>
+  adorn_percentages() |>
+  tibble()
+
+#Single tabyl allows you to check percentages and the arrange allows you to descend in order from what is the most important
+giveaway_total |>
+  tabyl(zip_code) |>
+  arrange(desc(n))
+```
+
+
+
+
+

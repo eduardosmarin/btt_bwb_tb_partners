@@ -1,0 +1,114 @@
+﻿CommonName,Native,GenusSpecies,Species
+Amur maple,I,Acer ginnala,ACGI
+Norway maple,I,Acer platanoides,ACPL
+Tree of heaven,I,Ailanthus altissima,AIAL
+Mimosa,I,Albizia julibrissin,ALJU
+camellia spp,I,Camellia ,CA22
+Cedar of lebanon,I,Cedrus libani,CELI
+ceratopetalum,I,Ceratopetalum ,CE
+Kousa dogwood,I,Cornus kousa,COKO
+Autumn olive,I,Elaeagnus umbellata,ELUM
+Ozark witchhazel,I,Hamamelis vernalis,HAVE2
+Rose-of-sharon,I,Hibiscus syriacus,HISY
+Common crapemyrtle,I,Lagerstroemia indica,LAIN
+European larch,I,Larix decidua,LADE
+White mulberry,I,Morus alba,MOAL
+Royal paulownia,I,Paulownia tomentosa,PATO
+Norway spruce,I,Picea abies,PIAB
+Japanese pieris,I,Pieris japonica,PIJA
+London plane,I,Platanus x acerifolia,PLAC1
+Oriental arborvitae,I,Platycladus orientalis,THOR
+Sweet cherry,I,Prunus avium,PRAV
+Peach,I,Prunus persica,PRPE2
+Kwanzan cherry,I,Prunus serrulata,PRSE2
+firethorn spp,I,Pyracantha ,PYSP
+Callery pear,I,Pyrus calleryana,PYCA
+Common pear,I,Pyrus communis,PYCO
+Sawtooth oak,I,Quercus acutissima,QUAC
+Weeping willow,I,Salix x sepulcralis Simonkai,SABA
+Japanese snowbell,I,Styrax japonicus,STJA
+Japanese tree lilac,I,Syringa reticulata,SYRE
+Littleleaf linden,I,Tilia cordata,TICO
+Chinese elm,I,Ulmus parvifolia,ULPA
+Siberian elm,I,Ulmus pumila,ULPU
+ungnadia spp,I,Ungnadia ,UN1
+Purple wisteria,I,Wisteria sinensis,WISI
+Japanese zelkova,I,Zelkova serrata,ZESE
+Boxelder,N,Acer negundo,ACNE
+Japanese maple,N,Acer palmatum,ACPA
+Red maple,N,Acer rubrum,ACRU
+Silver maple,N,Acer saccharinum,ACSA1
+Sugar maple,N,Acer saccharum,ACSA2
+serviceberry spp,N,Amelanchier ,AM
+Downy serviceberry,N,Amelanchier arborea,AMAR
+Pawpaw,N,Asimina triloba,ASTR
+Yellow birch,N,Betula alleghaniensis,BEAL
+American hornbeam,N,Carpinus caroliniana,CACA
+Mockernut hickory,N,Carya alba,CATO
+Bitternut hickory,N,Carya cordiformis,CACO
+Pignut hickory,N,Carya glabra,CAGL
+Nutmeg hickory,N,Carya myristiciformis,CAMY
+Shagbark hickory,N,Carya ovata,CAOV
+Northern catalpa,N,Catalpa speciosa,CASP
+Northern hackberry,N,Celtis occidentalis,CEOC
+redbud spp,N,Cercis ,CE18
+Eastern redbud,N,Cercis canadensis,CECA
+dogwood spp,N,Cornus ,CO1
+Alternateleaf dogwood,N,Cornus alternifolia,COAL
+Flowering dogwood,N,Cornus florida,COFL
+hawthorn spp,N,Crataegus ,CR
+Common persimmon,N,Diospyros virginiana,DIVI
+American beech,N,Fagus grandifolia,FAGR
+White ash,N,Fraxinus americana,FRAM
+Green ash,N,Fraxinus pennsylvanica,FRPE
+Pumpkin ash,N,Fraxinus profunda,FRPR
+Honeylocust,N,Gleditsia triacanthos,GLTR
+Witch hazel,N,Hamamelis virginiana,HAVI
+holly spp,N,Ilex ,ILSP
+American holly,N,Ilex opaca,ILOP
+Black walnut,N,Juglans nigra,JUNI
+juniper spp,N,Juniperus ,JU
+Common juniper,N,Juniperus communis,JUCO1
+Eastern red cedar,N,Juniperus virginiana,JUVI
+Mountain laurel,N,Kalmia latifolia,KALA
+Spicebush,N,Lindera benzoin,LIBE
+Sweetgum,N,Liquidambar styraciflua,LIST
+Tulip tree,N,Liriodendron tulipifera,LITU
+Cucumber tree,N,Magnolia acuminata,MAAC
+Southern magnolia,N,Magnolia grandiflora,MAGR
+Black tupelo,N,Nyssa sylvatica,NYSY
+Eastern hophornbeam,N,Ostrya virginiana,OSVI
+Red spruce,N,Picea rubens,PIRU
+Eastern white pine,N,Pinus strobus,PIST
+American sycamore,N,Platanus occidentalis,PLOC
+Eastern cottonwood,N,Populus deltoides,PODE
+Black cherry,N,Prunus serotina,PRSE1
+White oak,N,Quercus alba,QUAL
+Scarlet oak,N,Quercus coccinea,QUCO
+Southern red oak,N,Quercus falcata,QUFA
+Pin oak,N,Quercus palustris,QUPA
+Willow oak,N,Quercus phellos,QUPH
+Chestnut oak,N,Quercus prinus,QUPR
+Northern red oak,N,Quercus rubra,QURU
+Post oak,N,Quercus stellata,QUST
+Black oak,N,Quercus velutina,QUVE
+Staghorn sumac,N,Rhus hirta,RHTY
+Black locust,N,Robinia pseudoacacia,ROPS
+Black willow,N,Salix nigra,SANI
+Common elderberry,N,Sambucus canadensis,SACA
+Sassafras,N,Sassafras albidum,SAAL
+Northern white cedar,N,Thuja occidentalis,THOC
+American basswood,N,Tilia americana,TIAM
+Eastern hemlock,N,Tsuga canadensis,TSCA
+American elm,N,Ulmus americana,ULAM
+Slippery elm,N,Ulmus rubra,ULRU
+Arrowwood,N,Viburnum dentatum,VIDE
+ash spp,N/I,Fraxinus ,FR
+apple spp,N/I,Malus ,MA2
+plum spp,N/I,Prunus ,PR
+oak spp,N/I,Quercus ,QU
+rhododendron spp,N/I,Rhododendron ,RHSP1
+willow spp,N/I,Salix ,SA
+yew spp,N/I,Taxus ,TA
+elm spp,N/I,Ulmus ,ULS
+#N/A,UNKN,#N/A,UNKN

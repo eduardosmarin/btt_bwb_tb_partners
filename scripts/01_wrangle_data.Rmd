@@ -1,0 +1,1063 @@
+---
+title: "01_wrangle_data"
+author: "Eduardo (with Dexter H Locke, PhD)"
+date: "`r format(Sys.time())`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# 0 load libraries and read in data----
+```{r message=FALSE}
+
+# List all of your packages here
+
+knitr::opts_chunk$set(echo = TRUE)
+
+packs <-c(
+            'janitor'    # cleans things up, also pipe-friendly cross-tabulations
+           , 'sf'         # for spatial data support
+          , 'tidyverse'  # cuz
+          , 'tidylog'    # prints out what was done in dplyr and tidyr
+          , 'magrittr'   # for the pipe
+          , 'mapview'    # web maps for zooming and panning around
+          #, 'beepr'      # makes noise when things are done!
+          , 'tictoc'     # timing things.
+          , 'raster'
+          # , 'doParallel' # does what is says! PARALLEL
+          # 'broom.mixed',# tidiers for mixed models AND nlme::gls()
+          # , 'lubridate'   # DATES!
+          # , 'zipcode'   # Implements zipcode information
+          , 'tidygeocoder' # geo coding
+          , 'openxlsx' #writing Excels
+          )     
+
+# IF the packages in 'packs' are not already installed, install them
+# OTHERWISE do NOTHING
+if (length(setdiff(packs, rownames(installed.packages()))) > 0) {
+install.packages(setdiff(packs, rownames(installed.packages())))
+}
+
+# lapply(packs, library, character.only = TRUE)
+# this actually loads them with library(package_name)
+vapply(packs, library, character.only = TRUE, logical(1), logical.return = TRUE, quietly = TRUE)
+```
+
+# 1 COMPLETE Cleaning 2014 & 2015 Dataset 
+```{r}
+giveaway_2013_2014_2015FS<- 
+  readxl::read_excel("input_data/2013-15_Giveaway_Data.xlsx") |> 
+  janitor::clean_names() |> 
+  rename(giveaway_location = if_giveaway_giveaway_location,
+         planting_type = street_tree_giveaway_or_res_planting,
+         yard_location = x17, tree_size = notes_16) |>
+  mutate (location_type = case_when(
+          tree_size == "front yard" ~ "front yard",
+          tree_size == "back yard" ~ "back yard",
+          TRUE ~ tree_size),
+          yard_location = case_when(
+          yard_location == "Backyard" ~"backyard",
+          yard_location == "Yard" ~ "yard",
+          yard_location %in% c("Front Yard","Front yard") ~ "front yard",
+          TRUE ~ yard_location
+         ), 
+      tree_size =  case_when(
+      tree_size %in% c("front yard","back yard","St. Matthew                                    Church","1 front and 1 back","NA") ~ "No",
+      tree_size == "all 1.5\" or greater trees" ~ "Yes",
+      TRUE ~ "No"
+      )
+  ) |>
+  filter(is.na(notes_19)) |>
+  tidylog::select(-notes_19)
+
+giveaway_2013_2014_2015FS <- 
+  giveaway_2013_2014_2015FS |>
+ mutate(date = as.POSIXct(date, format = "%Y-%m-%d", tz = "UTC")) |>
+  mutate(address = case_when(
+    address == "Francis Scott Key EMS 1425 E Fort Avenue, Baltimore, MD 21230" ~ "1425 E Fort Avenue",
+    address == "Wyndcrest" ~ NA_character_, 
+    address == "111 Hamlet Hill Road Unit 802" ~ "111 Hamlet Hill Road",
+    address == "2110 St Paul Street, Apt 1" ~ "2110 St Paul Street",
+    address == "5210 Tramore Road, 2nd Floor" ~ "5210 Tramore Road",
+    address == "3026 St Paul Street, Apt B1" ~ "3026 St Paul Street",
+    address == "1439 Taylor Avenue, Apt 1" ~ "1439 Taylor Avenue",
+    TRUE ~ address)) |>
+  mutate(address = str_squish(address)) |>
+  filter(!is.na(address)) |>
+  mutate(across(starts_with("species_"), as.character)) |>
+  mutate(across(starts_with("species_"), ~str_squish(.))) |>
+  pivot_longer(cols = starts_with("species"), names_to = "species") |>
+  dplyr::select(-species) |>
+  rename(common_name = value) |>
+  filter(!is.na(common_name)) |>
+  dplyr::select(-location_type, -yard_location, -tree_size, -number_trees) |>
+  mutate(common_name = case_when(
+    common_name %in% c("NA","?") ~ "Other",
+    TRUE ~ common_name)) |>
+  mutate(city = "",
+         state = "MD") |>
+  mutate(city = case_when(
+    zip_code %in% c("21210","21212","21286","21204","21215","21239","21236","21230","21224", "21202","21213","21206","21216","21209","21231","21237","21228","21217","21211","21289","21225", "21207","21205","21226","21223","21222","21252","21201","21256","21221","21214","21218", "21203", "21250") ~ "Baltimore",
+    zip_code %in% c("21046","21050","21047") ~ "Columbia",
+    zip_code %in% c("21133","21117") ~ "Owings Mills",
+    zip_code %in% c("21208") ~ "Pikesville",
+    zip_code %in% c("21244") ~ "Windsor Mill",
+    zip_code %in% c("21030") ~ "Hunt Valley",
+    zip_code %in% c("21220") ~ "Middle River",
+    zip_code %in% c("21234") ~ "Parkville",
+    zip_code %in% c("21093") ~ "Lutherville",
+    zip_code %in% c("21222") ~ "Dundalk",
+    zip_code %in% c("21221") ~ "Essex",
+    zip_code %in% c("21401") ~ "Annapolis",
+    zip_code %in% c("20781") ~ "Hyattsville",
+    zip_code %in% c("20904","20905") ~ "Silver Spring",
+    zip_code %in% c("21043") ~ "Ellicott City",
+    zip_code %in% c("21122") ~ "Pasadena",
+    zip_code %in% c("21078") ~ "Havre de Grace",
+    zip_code %in% c("21084") ~ "Jarrettsville",
+    zip_code %in% c("21120") ~ "Parkton",
+    zip_code %in% c("21023") ~ "Butler",
+    zip_code %in% c("21053") ~ "Freeland",
+    zip_code %in% c("21136") ~ "Reistertown",
+    zip_code %in% c("21503") ~ "Cumberland",
+    zip_code %in% c("21162") ~ "White Hall",
+    zip_code %in% c("21057") ~ "Glen Arm",
+    zip_code %in% c("21128") ~ "Perry Hall",
+    zip_code %in% c("21071") ~ "Glyndon",
+    zip_code %in% c("21082") ~ "Hydes",
+    zip_code %in% c("21152") ~ "Sparks Glencoe",
+    zip_code %in% c("21229") ~ "Catonsville",
+    zip_code %in% c("21903") ~ "Perryville",
+    zip_code %in% c("21102") ~ "Manchester",
+    zip_code %in% c("21111") ~ "Monkton",
+    zip_code %in% c("21074") ~ "Hampstead",
+    zip_code %in% c("21155") ~ "Upperco",
+    zip_code %in% c("21131") ~ "Phoenix",
+    TRUE ~ city
+  )) |>
+  mutate(city_county = case_when(
+  city %in% c("Baltimore") ~ "City",
+  TRUE ~ city_county
+  )) |>
+  rename(county = city_county) |>
+mutate(genus_species = NA_character_) |>
+mutate(state = "MD") |>
+mutate(itree = NA_character_) |>
+dplyr::select(-planting_type) |>
+rename(phone = phone_number) |> 
+mutate(season = case_when(
+    as.numeric(format(date, "%m")) %in% 1:6 ~ "Spring",
+    as.numeric(format(date, "%m")) %in% 7:12 ~ "Fall",
+    TRUE ~ NA_character_
+  ))
+
+```
+
+# 2 COMPLETE Cleaning 2016 Dataset
+```{r}
+giveaway_2016FS <- 
+  readxl::read_excel("input_data/2016_Master_Giveaway_Data.xlsx") |> 
+  janitor::clean_names() |>
+  rename (date = giveaway_date, genus_species = tree_species) |>
+  separate(address, c("address", "city", "state"), ", ", extra = "merge", fill = "right") |>
+  mutate(address = case_when(
+    address == "326 Paddington Rd Baltimore" ~ "326 Paddington Rd",
+    address == "6106 Alta Ave Baltimore" ~ "6106 Alta Ave",
+    TRUE ~ address)) |>
+  mutate(state = if_else(is.na(state), "MD", state)) |>
+  mutate(has_comma = case_when(
+    str_detect(state, ",") ~ "Rmv",
+    TRUE ~ "Sty")) |> 
+  filter(has_comma != "Rmv") |>
+  filter(!is.na(address)) |>
+  dplyr::select(-has_comma, -watershed) |>
+  uncount(weights = number_species) |>
+  mutate(date = as.POSIXct(date, format = "%Y-%m-%d", tz = "UTC")) |>
+  rename(county = city_county) |>
+  mutate(phone = ifelse(!is.na(phone), 
+                        ifelse(str_detect(phone, "\\d{3}-\\d{3}-\\d{4}"), phone,
+                               str_replace(phone, "(\\d{3})(\\d{3})(\\d{4})", "\\1-\\2-\\3")),
+                        NA_character_)) |>
+  mutate(city = case_when(
+    str_detect(address, "Parkville") ~ "Parkville",
+    str_detect(address, "Lutherville-Timonium") ~ "Lutherville",
+    str_detect(address, "24 Oakridge Ct") ~ "Lutherville",
+    str_detect(address, "3312 Fallstaff Rd") ~ "Baltimore",
+    str_detect(address, "432 Drury Lane") ~ "Baltimore",
+    str_detect(address, "6709 Queens Ferry Rd") ~ "Baltimore",
+    str_detect(address, "326 Paddington Rd") ~ "Baltimore",
+    str_detect(address, "Ridge RuxtonSchool") ~ "Towson",
+    str_detect(address, "6106 Alta Ave") ~ "Baltimore",
+    TRUE ~ city
+  )) |>
+  mutate(address = case_when(
+    address == "2303 Pot Spring Rd\r\nLutherville-Timonium" ~ "2303 Pot Spring Rd",
+    address == "2108 Folkstone Rd\r\nLutherville-Timonium" ~ "2108 Folkstone Rd",
+    address == "4 Oak Tree Ct Lutherville-Timonium" ~ "4 Oak Tree Ct",
+    address == "Ridge RuxtonSchool" ~ "6916 Charles St",
+    address == "8412 Harford Rd Parkville" ~ "8412 Harford Rd",
+    address %in% c("Eton Rd","Padonia Elementary","N Charles St & W Lanvale St") ~ NA_character_,
+    TRUE ~ address
+  )) |>
+  filter(!is.na(address)) |>
+  rename(zip_code = zip) |>
+  mutate(city = ifelse(str_detect(city, " MD"), str_remove(city, " MD"), city)) |>
+  mutate(state = case_when(
+    state %in% c("Towson","MD ") ~ "MD",
+    TRUE ~ state
+  )) |>
+  mutate(state = str_squish(state)) |>
+mutate(common_name = NA_character_) |>
+mutate(itree = NA_character_) |>
+ mutate(season = case_when(
+    as.numeric(format(date, "%m")) %in% 1:6 ~ "Spring",
+    as.numeric(format(date, "%m")) %in% 7:12 ~ "Fall",
+    TRUE ~ NA_character_
+  ))
+
+```
+
+# 3 COMPLETE Cleaning 2017 Dataset 
+```{r}
+# Cleaning the 2017 Fall Data
+
+giveaway_2017F <- 
+  readxl::read_excel("input_data/Giveaways_All_2017FA.xlsx") |>
+  janitor::clean_names() |> 
+  slice(-(1:2)) |> 
+  dplyr::select(-transaction, -neighborhood, -street_and_yard_trees_street_and_yard_trees_name, -tree_type) |> 
+  mutate(preferred_tree = case_when(
+    is.na(preferred_tree) ~ "other",
+    TRUE ~ preferred_tree)) |>
+  mutate(mailing_street = str_to_title(mailing_street)) |>
+  rename(date = tree_order_date, address = mailing_street, zip_code = mailing_zip_postal_code, common_name = preferred_tree, city = mailing_city, state = mailing_state_province) |>
+  mutate(date = as.POSIXct(date, format = "%Y-%m-%d", tz = "UTC")) |>
+  mutate(phone = str_replace_all(phone, "[^0-9]", "")) |>
+  mutate(phone = ifelse(nchar(phone) != 10 & nchar(phone) != 11 & nchar(phone) != 12, NA_character_,
+                 ifelse(str_detect(phone, "\\d{3}-\\d{3}-\\d{4}"), phone,
+                 str_replace(phone, "(\\d{3})(\\d{3})(\\d{4})", "\\1-\\2-\\3")))) |>
+  filter(str_detect(address, "\\d")) |>
+  mutate(county = "") |>
+  mutate(giveaway_location = NA_character_)
+
+# Cleaning the 2017 Spring Data
+
+giveaway_2017S <- 
+  readxl::read_excel("input_data/2017_Master_Giveaway_Final.xlsx") |>
+  janitor::clean_names() |>
+  dplyr::select(-x14) |>
+  rename(date = giveaway_date, county = baltimore_city_or_county, address = street_address, email = email_address, phone = phone_number) |>
+   mutate (
+    species = str_to_sentence(species),
+    species = case_when(
+    species %in% c("Elderberry","Elderberrry") ~ "Elderberry",
+    species %in% c("River Birch") ~ "River birch",
+    species %in% c("Sweetbay Magnolia") ~ "Sweetbay magnolia",
+    species %in% c("White Oak") ~ "White oak",
+    species %in% c("Eastern Redbud") ~ "Eastern redbud",
+    species %in% c("Bald Cypress","Bald cypress") ~ "Bald cypress",
+    species %in% c("Eastern Red Cedar") ~ "Eastern red cedar",
+    species %in% c("American Holly") ~ "American holly",
+    species %in% c("Virginia Pine") ~ "Virginia pine",
+    species %in% c("Pignut Hickory") ~ "Pignut hickory",
+    species %in% c("Silver Maple") ~ "Silver maple",
+    species %in% c("Willow Bracket") ~ "Willow bracket",
+    species %in% c("Beach Plum","Beach plum") ~ "Beach plum",
+    species %in% c("Black Cherry") ~ "Black cherry",
+    species %in% c("Willow Oak") ~ "Willow oak",
+    species %in% c("Chestnut Oak") ~ "Chestnut oak",
+    species %in% c("Pawpaw","Paw Paw","Paw paw") ~ "Pawpaw",
+    species %in% c("Kentucky Coffeetree") ~ "Kentucky coffeetree",
+    species %in% c("Swamp White Oak") ~ "Swamp white oak",
+    species %in% c("Flowering Dogwood") ~ "Flowering dogwood",
+    species %in% c("Shell Bark Hickory") ~ "Shell bark hickory",
+    species %in% c("Bur Oak","Bur Oark","Bur oak") ~ "Bur oak",
+    species %in% c("Pin Oak") ~ "Pin oak",
+    species %in% c("Blackhaw Viburnum") ~ "Blackhaw viburnum",
+    species %in% c("Black Locust") ~ "Black locust",
+    species %in% c("with") ~ "NA",
+    TRUE ~ species
+    )) |>
+  filter(!is.na(species) & !is.na(number_of_trees)) |>
+   mutate(species = str_to_sentence(species)) |>
+  uncount(weights = number_of_trees) |>
+  mutate(address = str_to_title(address)) |>
+  rename(common_name = species) |>
+  mutate(date = "2017-03-20 UTC") |>
+  mutate(date = as.POSIXct(date, format = "%Y-%m-%d", tz = "UTC")) |>
+  mutate(phone = str_replace_all(phone, "[^0-9]", "")) |>
+  mutate(phone = ifelse(nchar(phone) != 10 & nchar(phone) != 11 & nchar(phone) != 12, NA_character_,
+                 ifelse(str_detect(phone, "\\d{3}-\\d{3}-\\d{4}"), phone,
+                 str_replace(phone, "(\\d{3})(\\d{3})(\\d{4})", "\\1-\\2-\\3")))) |>
+  filter(str_detect(address, "\\d"))
+
+#Combining both of the spreadsheet 
+
+giveaway_2017FS <-
+  rbind(giveaway_2017F, giveaway_2017S) |>
+  mutate(address = case_when (
+    address == "6013 Eunice Avenue\r\n" ~ "6013 Eunice Avenue",
+    address == "3109barclay" ~ "3109 Barclay St",
+    address == "2102drummond" ~ "2102 Drummond Rd", 
+    TRUE ~ address,
+  )) |>
+  mutate(city = case_when(
+    str_detect(address, "4735 Byron Road") ~ "Pikesville",
+    str_detect(address, "310 W. Joppa Rd") ~ "Towson",
+    str_detect(address, "1209 Overbrook Road") ~ "Baltimore",
+    TRUE ~ city
+  )) |>
+  mutate(zip_code = case_when(
+    address == "4214 Heckel Avenue" ~ "21206",
+    address == "3022 Westfield Avenue" ~ "21214",
+    address == "2822 Montebello Terrace" ~ "21214",
+    address == "3307 Southern Avenue" ~ "21214",
+    address == "2707 Montebello Terrace" ~ "21214",
+    address == "2600 Halcyon Avenue" ~ "21214",
+    address == "1206 Argonne Dr" ~ "21218",
+    address == "220 E University Pkwy" ~ "21218",
+    TRUE ~ zip_code
+  )) |>
+  mutate(state = case_when(
+    state %in% c("MD","Maryland","NA") ~ "MD",
+    TRUE ~ state
+  )) |>
+  mutate(city = str_to_title(city),
+        city = ifelse(city == "Owing Mills", "Owings Mills", city),
+         city = ifelse(str_detect(city, "Lutherville"), "Lutherville", city)) |>
+ mutate(genus_species = NA_character_) |>
+  mutate(itree = NA_character_) |>
+  mutate(zip_code = as.numeric(zip_code)) |>
+  mutate(season = case_when(
+    as.numeric(format(date, "%m")) %in% 1:6 ~ "Spring",
+    as.numeric(format(date, "%m")) %in% 7:12 ~ "Fall",
+    TRUE ~ NA_character_
+  ))
+
+```
+
+
+# 4 COMPLETE Cleaning 2018 Dataset 
+```{r}
+# Cleaning the 2018 Fall Data
+giveaway_2018F <- 
+  readxl::read_excel("input_data/Fall18_Final_Giveaway_Data.xlsx") |>
+  janitor::clean_names() |>
+  dplyr::select(-street_and_yard_trees_street_and_yard_trees_name, -neighborhood, -transaction) |>
+   mutate(mailing_city = case_when(
+     mailing_city == c("Baltimore") ~ "Baltimore", 
+     TRUE ~ mailing_city
+   )) |>
+   mutate(genus = tolower(genus)) |>
+   mutate(genus_species = paste0(genus, '_', species)) |>
+   dplyr::select(-genus, -species) |>
+   rename(date = created_date, planting_type = tree_type, address = mailing_street, zip_code = mailing_zip_postal_code, common_name = preferred_tree, city = mailing_city, state = mailing_state_province) |> 
+   mutate(common_name = str_to_sentence(common_name)) |>
+  mutate(common_name = case_when(
+    common_name == "American Elm \"Princeton\"" ~ "American Elm",
+    TRUE ~ common_name
+  )) |>
+  filter(!is.na(common_name)) |>
+   mutate(address = str_to_title(address)) |>
+   mutate(phone = str_replace_all(phone, "[^0-9]", "")) |>
+   mutate(phone = ifelse(nchar(phone) != 10 & nchar(phone) != 11 & nchar(phone) != 12, NA_character_,
+                 ifelse(str_detect(phone, "\\d{3}-\\d{3}-\\d{4}"), phone,
+                 str_replace(phone, "(\\d{3})(\\d{3})(\\d{4})", "\\1-\\2-\\3")))) |>
+   filter(str_detect(address, "\\d")) |>
+ mutate(date = as.POSIXct(date, format = "%Y-%m-%d", tz = "UTC"))
+
+# Cleaning the 2018 Spring Data
+
+giveaway_2018S <- 
+  readxl::read_excel("input_data/2018 Spring Tree Giveaway Customers-2018-09-06-09-36-43.xlsx",
+                     skip = 10) |> 
+   janitor::clean_names() |>
+   dplyr::select(-x2, -street_and_yard_trees_street_and_yard_trees_name, -neighborhood, -transaction) |>
+   mutate(mailing_city = case_when(
+     mailing_city %in% c("Baltimore", "ParksvilleBaltimore", "Baltimoretowson") ~ "Baltimore", 
+     TRUE ~ mailing_city
+   )) |>
+   mutate(mailing_state_province = case_when(
+     mailing_state_province %in% c("Maryland", "MD") ~ "MD",
+     TRUE ~ mailing_state_province
+   )) |>
+   mutate(genus = tolower(genus)) |>
+   mutate(genus_species = paste0(genus, '_', species)) |>
+   dplyr::select(-genus, -species) |>
+   rename(date = tree_order_date, planting_type = tree_type, address = mailing_street, zip_code = mailing_zip_postal_code, common_name = preferred_tree, city = mailing_city, state = mailing_state_province) |> 
+   mutate(common_name = str_to_sentence(common_name)) |> 
+  mutate(common_name = case_when(
+    common_name == "American Elm \"Princeton\"" ~ "American Elm",
+    TRUE ~ common_name
+  )) |>
+    filter(!is.na(common_name)) |>
+   mutate(address = str_to_title(address)) |>
+   mutate(phone = str_replace_all(phone, "[^0-9]", "")) |>
+   mutate(phone = ifelse(nchar(phone) != 10 & nchar(phone) != 11 & nchar(phone) != 12, NA_character_,
+                 ifelse(str_detect(phone, "\\d{3}-\\d{3}-\\d{4}"), phone,
+                 str_replace(phone, "(\\d{3})(\\d{3})(\\d{4})", "\\1-\\2-\\3")))) |>
+   filter(str_detect(address, "\\d")) |>
+  mutate(date = as.POSIXct(date, format = "%Y-%m-%d", tz = "UTC"))
+
+#Combining both of the spreadsheet 
+
+giveaway_2018FS <-
+  rbind(giveaway_2018F, giveaway_2018S) |>
+  mutate(address = str_remove(address, (",.*"))) |>
+  mutate(address = str_remove(address, ("\\\\.*"))) |> 
+  mutate(address = str_remove(address, ("Apt \\d+"))) |>
+  mutate(address = case_when(
+    address == "1 1 Aly" ~ NA_character_, 
+  address == "2007 Clipper Park Road\r\n\r\n#225" ~ "2007 Clipper Park Road",
+    TRUE ~ address
+  )) |>
+  mutate(city = case_when(
+    is.na(city) ~ "Catonsville",
+    TRUE ~ city
+  )) |>
+  mutate(state = case_when(
+    state %in% c("MD","Md") ~ "MD",
+    TRUE ~ NA_character_
+  )) |>
+  filter(!is.na(state)) |>
+  mutate(city = str_to_title(city),
+         city = ifelse(city == "Owing Mills", "Owings Mills", city),
+         city = ifelse(str_detect(city, "Lutherville"), "Lutherville", city)) |>
+  filter(!is.na(address)) |>
+  mutate(zip_code = case_when(
+    zip_code == "212131" ~ "21231",
+    zip_code == "85323" ~ "21230",
+    TRUE ~ zip_code
+  )) |>
+  rename(itree = abbreviation) |>
+  dplyr::select(-planting_type) |>
+  mutate(giveaway_location = NA_character_) |>
+  mutate(county = case_when(
+    city == "Baltimore" ~ "Baltimore City",
+    TRUE ~ "Baltimore County"
+  )) |>
+  mutate(zip_code = as.numeric(zip_code)) |>
+  mutate(season = case_when(
+    as.numeric(format(date, "%m")) %in% 1:6 ~ "Spring",
+    as.numeric(format(date, "%m")) %in% 7:12 ~ "Fall",
+    TRUE ~ NA_character_
+  ))
+
+```
+
+
+# 5 COMPLETE Cleaning 2019 Dataset
+```{r}
+
+# Cleaning the 2019 Fall Data
+
+giveaway_2019F <- 
+  readxl::read_excel("input_data/2019FA_Final_Giveaway_Data.xlsx") |>
+  janitor::clean_names() |>
+  mutate(tree_city_1 = case_when(
+    tree_city_1 %in% c("BALTIMORE","BALYIMORE") ~ "Baltimore",
+    TRUE ~ tree_city_1)) |>
+  mutate(preferred_tree = str_to_sentence(preferred_tree)) |>
+  filter(!is.na(tree_state)) |>
+  dplyr::select (-tree_number) |>
+  mutate(tree_st_address = str_to_sentence(tree_st_address)) |>
+  rename(state = tree_state, county = tree_county, date = form_submitted_date, giveaway_location = campaign_name, common_name = preferred_tree, address = tree_st_address, zip_code = tree_zip, city = tree_city_1) |>
+  mutate(first_name = NA) |>
+  mutate (last_name = NA) |>
+  mutate(address = str_to_title(address)) |>
+  mutate(email = "NA") |>
+  mutate(phone = "NA") |>
+  mutate(date = as.POSIXct(date, format = "%Y-%m-%d", tz = "UTC"))
+  
+# Cleaning the 2019 Spring Data
+
+giveaway_2019S <- 
+  readr::read_csv("input_data/2019SP_Final_Giveaway_Data.csv") |>
+  janitor::clean_names() |>
+  mutate(city = case_when (
+    city %in% c("Baltimore","Reistertown Baltimore") ~ "Baltimore",
+    TRUE ~ city ))|>
+  mutate(state = case_when(
+    state == "Maryland" ~ "MD",
+    TRUE ~ state)) |>
+  mutate(county = "") |>
+  mutate(tree_species = str_to_sentence(tree_species)) |>
+  dplyr::select(-form_id) |>
+  mutate(street_address = str_to_sentence(street_address)) |>
+  rename(date = submitted_date, email = email_address, address = street_address, common_name = tree_species,      phone = phone_number) |>
+  mutate(common_name = case_when(
+    common_name == "Black tupelo (black gum)" ~ "Black tupelo",
+    TRUE ~ common_name)) |>
+  mutate(address = str_to_title(address)) |>
+  mutate(giveaway_location = "NA") |>
+    mutate(date = case_when(
+    grepl("6/2/19", date) ~ as.POSIXct("2019-06-02", tz = "UTC"),
+    grepl("5/25/2019", date) ~ as.POSIXct("2019-05-25", tz = "UTC"),
+    grepl("5/19/19", date) ~ as.POSIXct("2019-05-19", tz = "UTC"),
+    grepl("5/11/2019", date) ~ as.POSIXct("2019-05-11", tz = "UTC"),
+    grepl(paste(c("5/4/19", "5/4/2019"), collapse = "|"), date) ~ as.POSIXct("2019-05-04", tz = "UTC"),
+    grepl("4/27/2019", date) ~ as.POSIXct("2019-04-27", tz = "UTC"),
+    grepl(paste(c("4/20/19", "4/20/2019"), collapse = "|"), date) ~ as.POSIXct("2019-04-20", tz = "UTC"),
+    grepl("4/17/19", date) ~ as.POSIXct("2019-04-17", tz = "UTC"),
+    grepl("4/15/2019", date) ~ as.POSIXct("2019-04-15", tz = "UTC"),
+    grepl("4/13/2019", date) ~ as.POSIXct("2019-04-13", tz = "UTC"),
+    grepl("4/6/19", date) ~ as.POSIXct("2019-04-06", tz = "UTC"),
+    TRUE ~ as.POSIXct(date, format = "%m/%d/%Y", tz = "UTC")
+  )) |>
+  mutate(phone = str_replace_all(phone, "[^0-9]", "")) |>
+  mutate(phone = ifelse(nchar(phone) != 10 & nchar(phone) != 11 & nchar(phone) != 12, NA_character_,
+                 ifelse(str_detect(phone, "\\d{3}-\\d{3}-\\d{4}"), phone,
+                 str_replace(phone, "(\\d{3})(\\d{3})(\\d{4})", "\\1-\\2-\\3")))) |>
+  filter(str_detect(address, "\\d")) 
+  
+# Combining both spreadsheets
+
+giveaway_2019FS <- rbind(giveaway_2019F, giveaway_2019S) |>
+  mutate(address = str_remove(address, "Apt .*")) |>
+  mutate(address = str_remove(address, "Apt. .*")) |>
+  mutate(address = case_when(
+    address %in% c("3511 3","2 0vershot","6207") ~ NA_character_,
+    address == "I 2825 W Strathmore Ave" ~ "825 W Strathmore Ave",
+    TRUE ~ address
+  )) |>
+  filter(str_detect(address, "\\d")) |>
+  filter(!is.na(address)) |>
+  mutate(city = case_when(
+    city == "Reisterstown Baltimore" ~ "Reisterstown",
+    TRUE ~ city
+  )) |>
+  mutate(city = str_to_title(city)) |>
+  filter(city != "4435070557") |>
+  mutate(zip_code = ifelse(zip_code == "210","21202",zip_code)) |>
+  mutate(city = ifelse(str_detect(city, "Lutherville"), "Lutherville", city)) |>
+  mutate(zip_code = case_when(
+    zip_code == "2124" ~ "21214",
+    zip_code == "2230" ~ "21230",
+    TRUE ~ zip_code
+  )) |>
+  mutate(address = str_squish(address)) |>
+  mutate(itree = NA_character_) |>
+  mutate(genus_species = NA_character_) |>
+  mutate(zip_code = as.numeric(zip_code)) |>
+  mutate(season = case_when(
+    as.numeric(format(date, "%m")) %in% 1:6 ~ "Spring",
+    as.numeric(format(date, "%m")) %in% 7:12 ~ "Fall",
+    TRUE ~ NA_character_
+  ))
+
+```
+
+# 6 COMPLETE Cleaning 2020 Dataset (0/0) -- Does not exist because of COVID
+
+# 7 COMPLETE Cleaning 2021 Dataset
+
+```{r}
+
+# Cleaning the 2021 Fall Data
+
+#Read shapefiles, geopackages: sf::st_read
+
+giveaway_2021F <- 
+  readxl::read_excel("input_data/Fall21_TreeGiveaways_Final_Data.xlsx") |>
+  janitor::clean_names() |>
+  mutate(city_1 = case_when (
+    city_1 %in% c("BALTIMORE", "BALTI") ~ "Baltimore",
+    TRUE ~ city_1)) |>
+  mutate(preferred_tree = str_to_sentence(preferred_tree)) |>
+  mutate(st_address = str_to_title(st_address)) |>
+  rename(city = city_1, common_name = preferred_tree, date = tree_order_date, giveaway_location = tree_campaign, address = st_address,   zip_code = zip, phone = contact_phone, email = contact_email) |>
+  mutate(phone = str_replace_all(phone, "[^0-9]", "")) |>
+  mutate(phone = ifelse(nchar(phone) != 10 & nchar(phone) != 11 & nchar(phone) != 12, NA_character_,
+                 ifelse(str_detect(phone, "\\d{3}-\\d{3}-\\d{4}"), phone,
+                 str_replace(phone, "(\\d{3})(\\d{3})(\\d{4})", "\\1-\\2-\\3")))) |>
+  filter(str_detect(address, "\\d")) |>
+  dplyr::select(-tree_tree_number)
+
+# Cleaning the 2021 Fall Data
+
+giveaway_2021S <- 
+  readxl::read_excel("input_data/FinalSF_GiveawayDATASpring2021 for mapping.xlsx") |>
+  janitor::clean_names() |>
+  mutate(city_1 = case_when(
+    city_1 %in% c("BALTIMORE") ~ "Baltimore",
+    TRUE ~ city_1)) |>
+  mutate(preferred_tree = str_to_sentence(preferred_tree)) |>
+  mutate(st_address = str_to_title(st_address)) |>
+  dplyr::select(-tree_tree_number, -contact_account_id) |>
+  rename(city = city_1, common_name = preferred_tree, date = tree_order_date, giveaway_location = tree_campaign, address = st_address, zip_code = zip, phone = contact_phone) |>
+  mutate(phone = str_replace_all(phone, "[^0-9]", "")) |>
+  mutate(phone = ifelse(nchar(phone) != 10 & nchar(phone) != 11 & nchar(phone) != 12, NA_character_,
+                 ifelse(str_detect(phone, "\\d{3}-\\d{3}-\\d{4}"), phone,
+                 str_replace(phone, "(\\d{3})(\\d{3})(\\d{4})", "\\1-\\2-\\3")))) |>
+  filter(str_detect(address, "\\d"))
+
+# Combining both spreadsheets
+
+giveaway_2021FS <-
+  rbind(giveaway_2021F, giveaway_2021S) |>
+  mutate(city = str_to_title(city),
+         city = case_when(
+        city %in% c("Lutherville","Lutherville Timonium") ~ "Lutherville",
+        city %in% c("Ctonsville","Baltimore County") ~ "Catonsville",
+        TRUE ~ city
+  )) |>
+  mutate(address = ifelse(
+    str_detect(address, "3219 Massachusetts Ave"), str_remove(address, "3219 Massachusetts Ave"), address),
+    address = ifelse(str_detect(address, " Apt 313"), str_remove(address, " Apt 313"), address)) |>
+  filter(address != "") |>
+   mutate(itree = NA_character_) |>
+  mutate(genus_species = NA_character_) |>
+  mutate(first_name = NA_character_) |>
+  mutate(last_name = NA_character_) |>
+  mutate(zip_code = as.numeric(zip_code)) |>
+  mutate(season = case_when(
+    as.numeric(format(date, "%m")) %in% 1:6 ~ "Spring",
+    as.numeric(format(date, "%m")) %in% 7:12 ~ "Fall",
+    TRUE ~ NA_character_
+  ))
+
+
+```
+
+# 8 COMPLETE Cleaning 2022 Dataset
+
+```{r}
+
+# Cleaning the 2022 Fall Data
+
+giveaway_2022F <- 
+  readxl::read_excel("input_data/Final_Tree_Giveaway_Fall_2022.xlsx") |>
+  janitor::clean_names() |>
+  dplyr::select(-1:-28, -x2, -y2, -user_tree, -user_st_ad, -user_city, -user_state, -user_zip) |> 
+  mutate(in_city = case_when(
+    in_city %in% c("Baltimore","BALTIMORE") ~ "Baltimore", 
+    TRUE ~ in_city)) |>
+  mutate(user_prefe = str_to_sentence(user_prefe)) |>
+  mutate (user_tre_1 = str_remove(user_tre_1,"\\d{2}/\\d{2}/\\d{4}")) |>
+  mutate(in_street = str_to_title(in_street)) |>
+  rename (address = in_street, city = in_city, state = in_state, zip_code = in_zip, common_name = user_prefe, date = user_tree1, county = user_count, phone = user_conta, email = user_con_1, first_name = user_con_2, last_name = user_con_3, giveaway_location = user_tre_1) |>
+  mutate(phone = str_replace_all(phone, "[^0-9]", "")) |>
+  mutate(phone = ifelse(nchar(phone) != 10 & nchar(phone) != 11 & nchar(phone) != 12, NA_character_,
+                 ifelse(str_detect(phone, "\\d{3}-\\d{3}-\\d{4}"), phone,
+                 str_replace(phone, "(\\d{3})(\\d{3})(\\d{4})", "\\1-\\2-\\3")))) |>
+  filter(str_detect(address, "\\d"))
+
+#Cleaning the 2022 Spring Data
+
+giveaway_2022S <- 
+  readxl::read_excel("input_data/FinalSpring22Giveaway_BWB.xlsx") |>
+  janitor::clean_names() |>
+  mutate(city_1 = case_when(
+    city_1 %in% c("BALTIMORE","BALTIMORE MD") ~ "Baltimore",
+    st_address %in% c("1432 E Baltimore St","5619 SHARON RD") ~ "Baltimore",
+    TRUE ~ city_1)) |>
+  mutate(preferred_tree = str_to_sentence(preferred_tree)) |>
+  mutate (county = case_when (
+    st_address %in% c("1432 E Baltimore St","5619 SHARON RD") ~ "Baltimore County",
+    TRUE ~ county)) |>
+  mutate(st_address = str_to_title(st_address)) |>
+  dplyr::select(-tree_tree_number, -planting_type, -remap_edit) |>
+  rename(common_name = preferred_tree, date = tree_order_date, giveaway_location = location, address = st_address, zip_code = zip, phone = contact_phone, email = contact_email, first_name = contact_first_name, last_name = contact_last_name, city = city_1) |>
+  mutate(phone = str_replace_all(phone, "[^0-9]", "")) |>
+  mutate(phone = ifelse(nchar(phone) != 10 & nchar(phone) != 11 & nchar(phone) != 12, NA_character_,
+                 ifelse(str_detect(phone, "\\d{3}-\\d{3}-\\d{4}"), phone,
+                 str_replace(phone, "(\\d{3})(\\d{3})(\\d{4})", "\\1-\\2-\\3")))) |>
+  filter(str_detect(address, "\\d"))
+
+giveaway_2022FS <-
+  rbind(giveaway_2022F, giveaway_2022S) |>
+  mutate(city = str_to_title(city),
+         city = case_when(
+          city %in% c("Lutherville","Lutherville Timonium") ~ "Lutherville",
+          TRUE ~ city)) |>
+  mutate(city = case_when(
+    address == "5619 Sharon Rd" ~ "Glen Arm",
+    TRUE ~ city)) |>
+  mutate(zip_code = case_when(
+      address == "5619 Sharon Rd" ~ "21057",
+    TRUE ~ zip_code
+    )) |>
+  mutate(address = case_when(
+    address == "12016 Ridge Valley Driveive" ~ "12016 Ridge Valley Dr",
+    TRUE ~ address
+  )) |>
+  mutate(state = "MD") |>
+    mutate(itree = NA_character_) |>
+  mutate(genus_species = NA_character_) |>
+  mutate(zip_code = as.numeric(zip_code)) |>
+  mutate(season = case_when(
+    as.numeric(format(date, "%m")) %in% 1:6 ~ "Spring",
+    as.numeric(format(date, "%m")) %in% 7:12 ~ "Fall",
+    TRUE ~ NA_character_
+  ))
+
+```
+
+# 9 COMPLETE Cleaning 2023 Dataset (3/3)
+```{r}
+
+#Cleaning the 2023 Fall Data
+
+giveaway_2023F <- 
+  readxl::read_excel("input_data/TreeGiveaway_FA23.xlsx") |>
+  janitor::clean_names() |>
+  dplyr::select(-1:-28, -x2, -y2, -user_tree, -user_st_ad, -user_city, -user_state, -user_zip, -user_conta) |> 
+  mutate(in_city = case_when(
+    in_city %in% c("BALTIMORE") ~ "Baltimore", 
+    TRUE ~ in_city)) |>
+  mutate(user_prefe = str_to_sentence(user_prefe)) |>
+  mutate (user_tre_1 = str_remove(user_tre_1,"\\d{2}/\\d{2}/\\d{4}")) |>
+  mutate(in_street = str_to_title(in_street)) |>
+  rename (county = user_count, address = in_street, city = in_city, state = in_state, zip_code = in_zip, common_name = user_prefe, date = user_tree1, county = user_count, giveaway_location = user_tre_1) |>
+  filter(str_detect(address, "\\d")) |>
+  mutate(date = ifelse(is.na(date), as.POSIXct("2023-10-21", tz = "UTC"), date)) |>
+   mutate(date = as.POSIXct(date, format = "%Y-%m-%d", tz = "UTC"))
+
+
+#Cleaning the 2023 Spring Data
+
+giveaway_2023S <- 
+  readxl::read_excel("input_data/Spring2023Giveaway.xlsx") |>
+  janitor::clean_names() |>
+  dplyr::select(-1:-28, -x2, -y2, -user_tree, -user_st_ad, -user_city, -user_state, -user_zip) |> 
+  mutate(in_city = case_when(
+    in_city %in% c("BALTIMORE") ~ "Baltimore", 
+    TRUE ~ in_city)) |>
+  mutate(user_prefe = str_to_sentence(user_prefe)) |>
+  mutate(in_street = str_to_title(in_street)) |>
+  rename (county = user_count, address = in_street, city = in_city, state = in_state, zip_code = in_zip, common_name = user_prefe, date = user_tree1, county = user_count) |>
+  mutate(giveaway_location = NA) |>
+  filter(str_detect(address, "\\d"))
+
+
+#Combining both spreadsheets
+
+giveaway_2023FS <-
+  rbind(giveaway_2023F, giveaway_2023S) |>
+  mutate(county = case_when(
+    county %in% c("Baltimore City","City") ~ "Baltimore City",
+    TRUE ~ county)) |>
+  mutate(city = str_to_title(city)) |>
+  mutate(city = ifelse(city == "Towsom", "Towson", city)) |>
+  mutate(itree = NA_character_) |>
+  mutate(genus_species = NA_character_) |>
+  mutate(first_name = NA_character_) |>
+  mutate(last_name = NA_character_) |>
+  mutate(email = NA_character_) |>
+  mutate(phone = NA_character_) |>
+  mutate(zip_code = as.numeric(zip_code)) |>
+  mutate(season = case_when(
+    as.numeric(format(date, "%m")) %in% 1:6 ~ "Spring",
+    as.numeric(format(date, "%m")) %in% 7:12 ~ "Fall",
+    TRUE ~ NA_character_
+  ))
+  
+```
+
+
+# 10 COMPLETE Combining all spreadsheets 
+```{r}
+#Checking what needs to change in each one
+janitor::compare_df_cols(
+    giveaway_2013_2014_2015FS
+   , giveaway_2016FS
+   , giveaway_2017FS
+   , giveaway_2018FS
+   , giveaway_2019FS
+   , giveaway_2021FS
+   , giveaway_2022FS
+   , giveaway_2023FS
+)
+  
+#Combining all of the spreadsheets
+giveaway_total <- 
+  bind_rows(giveaway_2013_2014_2015FS
+            , giveaway_2016FS
+            , giveaway_2017FS
+            , giveaway_2018FS
+            , giveaway_2019FS
+            , giveaway_2021FS
+            , giveaway_2022FS
+            , giveaway_2023FS
+            ) |>
+  mutate(year = lubridate::year(date)) 
+
+giveaway_total
+```
+
+#11 COMPLETE Editing combined spreadsheet (0/1)
+```{r}
+#Making the tribble of county and species for left join 
+county_data <- 
+  tribble(
+  ~city,               ~county,          
+  "Baltimore",         "Baltimore City",
+  "Arbutus",           "Baltimore County", #Census-designated places
+  "Baltimore Highlands","Baltimore County",
+  "Bowley Quarters",   "Baltimore County",
+  "Carney",            "Baltimore County",
+  "Catonsville",       "Baltimore County",  
+  "Dundalk",           "Baltimore County",
+  "Edgemere",          "Baltimore County",  
+  "Essex",             "Baltimore County",  
+  "Garrison",          "Baltimore County",
+  "Hampton",           "Baltimore County",  
+  "Kingsville",        "Baltimore County", 
+  "Lansdowne",         "Baltimore County",
+  "Lochearn",          "Baltimore County",  
+  "Lutherville",       "Baltimore County", 
+  "Mays Chapel",       "Baltimore County",  
+  "Middle River",      "Baltimore County",
+  "Milford Mill",      "Baltimore County",
+  "Overlea",           "Baltimore County",
+  "Owings Mills",      "Baltimore County",
+  "Parkville",         "Baltimore County",
+  "Perry Hall",        "Baltimore County",
+  "Pikesville",        "Baltimore County",
+  "Randallstown",      "Baltimore County",
+  "Reistertown",       "Baltimore County",
+  "Rosdeale",          "Baltimore County",
+  "Rossville",         "Baltimore County",
+  "Timonium",          "Baltimore County",
+  "White Marsh",       "Baltimore County",
+  "Woodlawn",          "Baltimore County", 
+  "Baldwin",           "Baltimore County",  #Unincorporated communtiies
+  "Boring",            "Baltimore County", 
+  "Bradshaw",          "Baltimore County", 
+  "Brooklandville",    "Baltimore County", 
+  "Butler",            "Baltimore County", 
+  "Chase",             "Baltimore County", 
+  "Fork",              "Baltimore County", 
+  "Fort Howard",       "Baltimore County", 
+  "Germantown",        "Baltimore County", 
+  "Glen Arm",          "Baltimore County", 
+  "Glencoe",           "Baltimore County", 
+  "Glyndon",           "Baltimore County", 
+  "Halethorpe",        "Baltimore County", 
+  "Hereford",          "Baltimore County", 
+  "Hunt Valley",       "Baltimore County", 
+  "Hydes",             "Baltimore County", 
+  "Jacksonville",      "Baltimore County", 
+  "Long Green",        "Baltimore County", 
+  "Maryland Line",     "Baltimore County", 
+  "Monkton",           "Baltimore County",
+  "Oeila",             "Baltimore County",
+  "Parkton",           "Baltimore County",
+  "Phoenix",           "Baltimore County",
+  "Ruxton",            "Baltimore County",
+  "Sparks",            "Baltimore County",
+  "Sparrows Point",    "Baltimore County",
+  "Stevenson",         "Baltimore County",
+  "Trump",             "Baltimore County",
+  "Turners Station",   "Baltimore County",
+  "Upper Falls",       "Baltimore County",
+  "Upperco",           "Baltimore County",
+  "White Hall",        "Baltimore County"
+  )
+  
+species_data <- 
+  tribble(
+  ~common_name,        ~genus_species_lu,          ~itree_lu,
+  "Hackberry",         "Celtis occidentalis",     "CEOC",
+  "Red Maple",         "Acer rubrum",             "ACRU",
+  "Serviceberry",      "Amelanchier sp.",         "AM",
+  "Willow Oak",        "Quercus phellos",         "QUPH",
+  "Northern Red Oak",  "Quercus rubra",           "QURU",
+  "White Oak",         "Quercus alba",            "QUAL",
+  "Black Gum",         "Nyssa sylvatica",         "NYSY",
+  "American Elm",      "Ulmus americana",         "ULAM",
+  "Eastern Redbud",    "Cercis canadensis",       "CECA",
+  "London Plane",      "Platanus hybrida",        "PLAC",
+  "River Birch",       "Betula nigra",            "BENI",
+  "Pin Oak",           "Quercus palustris",       "QUPA",
+  "American Hornbeam", "Carpinus caroliniana",    "CACA",
+  "Swamp White Oak",   "Quercus bicolor",         "QUBI",
+  "Sassafras",         "Sassafras albidum",       "SAAL",
+  "Chestnut Oak",      "Quercus prinus",          "QUPR",
+  "Eastern Red Cedar", "Juniperus virginiana",    "JUVI",
+  "Bald Cypress",      "Taxodium distichum",      "TADI",
+  "American Plum",     "Prunus americana",        "PRAM", 
+  "Virginia Pine",     "Pinus virginiana",        "PIVI",
+  "Black Cherry",      "Prunus serotina",         "PRSE1",
+  "Black Oak",         "Quercus velutina",        "QUVE",
+  "Sugar Maple",       "Acer saccharum",          "ACSA3",
+  "Pawpaw",            "Asimina triloba",         "ASTR",
+  "American Holly",    "Ilex opaca",              "ILOP",
+  "Sweetbay Magnolia", "Magnolia virginiana",     "MAVI",
+  "Eastern White Pine", "Pinus strobus",          "PIST",
+  "Flowering Dogwood", "Cornus florida",          "COFL2",
+  "American Sycamore", "Platanus occidentalis",   "PLOC",
+  "Southern Magnolia", "Magnolia grandiflora",    "MAGR",
+  "American Sweetgum", "Liquidambar styraciflua", "LIST",
+  "American Witchhazel","Hamamelis virginiana",   "HAVI",
+  "Bur Oak",           "Quercus macrocarpa",      "QUMA1",
+  "American Sycamore", "Platanus occidentalis",   "PLOC",
+  "Black Chokeberry",  "Aronia melanocarpa",      "ARME6",
+  "Pignut Hickory",    "Carya glabra",            "CAGL8",
+  "Silver Maple",      "Acer saccharinum",        "ACSA1",
+  "Kentucky Yellowwood","Cladrastis kentukea",    "CLKE",
+  "Kentucky Coffeetree","Gymnocladus dioicusa",   "GYDI",
+  "Beach Plum",        "Prunus maritima",         "PRMA2",
+  "Blackhaw Viburnum", "Viburnum prunifolium",    "VIPR",
+  "Black Locust",      "Robinia pseudoacacia",    "ROPS",
+  "Pecan",             "Carya illinoinensis",     "CAIL2",
+  "American Hophornbeam","Ostrya virginiana",     "OSVI",
+  "Shellbark Hickory", "Carya laciniosa",         "CALA21",
+  "American Elderberry","Sambucus canadensis",     "CAIL2",
+  "Boxelder Maple",    "Acer negundo",            "ACNE",
+  "Eastern Cottonwood", "Populus deltoides",      "PODE3",
+  "Gingko",            "Ginkgo biloba",            "GIBI",
+  "American Hazelnut", "Corylus americana",        "COAM",
+  "American Persimmon", "Diospyros virginiana",    "DIVI",
+  "Swamp Chestnut Oak", "Quercus michauxii",       "QUMI",
+  "Pitch Pine",         "Pinus rigida",            "PIRI",
+  "Southern Red Oak",   "Quercus falcata",         "QUFA",
+  "Horsechestnut",     "Aesculus hippocastanum",   "AEHI",
+  "Scarlet Oak",        "Quercus coccinea",        "QUCO2",
+  "Loblolly Pine",      "Pinus taeda",             "PITA",
+  "American Beech",     "Fagus grandifolia",       "FAGR",
+  "Pagoda Dogwood",     "Cornus alternifolia",     "COAL",
+  "Crape Myrtle",       "Lagerstroemia indica",    "LAIN",
+  "Flowering Cherry",   "Prunus yedoensis",        "PRYE",
+  "Fringetree",         "Chionanthus virginicus",  "CHVI3",
+  "Arborvitae",         "Thuja occidentalis",      "THOC2", #Shrub
+  "Black Willow",       "Salix nigra",             "SANI",
+  "Common Fig",         "Ficus carica",            "FICA",
+  "Blackjack Oak",      "Quercus marilandica",     "QUMA2",
+  "Post Oak",           "Quercus stellata",        "QUST",
+  "Sweet Birch",        "Betula lenta",            "BELE",
+  "Bottlebrush Buckeye","Aesculus parviflora",     "AEPA2", #Shrub
+  "Bear Oak",           "Quercus ilicifolia",      "QUIL",
+  "Eastern Cottonwood", "Populus deltoides",       "PODE3",
+  "Chinkapin Oak",      "Quercus muehlenbergii",   "QUMU",
+  "Washington Hawthorn", "Crataegus phaenopyrum",  "CRPH",
+  "Ironwood",           "Casuarina equisetifolia", "CAEQ",
+  "Smooth Alder",       "Alnus serrulata",         "ALSE2",
+  "Red Buckeye",        "Aesculus pavia",          "AEPA",
+  "Chickasaw Plum",     "Prunus angustifolia",     "PRAN",
+  "American Black Elderberry", "Sambucus nigra",   "SANI4", #Shrub
+  "Atlantic White Cedar","Chamaecyparis thyoides", "CHTH",
+  "Tulip Poplar",       "Liriodendron tulipifera", "LITU",
+)
+
+#Fixing the species
+giveaway_total <- 
+  giveaway_total |>
+  mutate(common_name = str_to_title(common_name)) |>
+  mutate(check = "0") |>
+  mutate(check = case_when(
+    common_name %in% c("Red Oak","Witchazel","Witch Hazel","Redbud","Elm","Hornbeam","Plum","White Pine","Sweet Gum","Sycamore","Chokeberry","Yellowwood","Sweetgum","Elderberry","Cottonwood","Hazelnut","Persimmon","Flowering Cherry","Viburnum","American Elder","Hawthorn","Tulip Tree","Sassafras") ~ "1",
+    TRUE ~ check
+  )) |>
+  mutate(check = as.numeric(check)) |>
+  mutate(common_name = case_when(
+    str_detect(common_name, "Princeton") ~ "American Elm",
+    str_detect(common_name, "princeton") ~ "American Elm",
+    TRUE ~ common_name
+  )) |>
+  mutate(common_name = case_when(
+    common_name %in% c("Other","(No Preference Or Unsure)","With") ~ "Other",
+    TRUE ~ common_name
+  )) |>
+  mutate(common_name = case_when(
+    common_name %in% c("Witch Hazel","Witchhazel") ~ "American Witchhazel",
+    common_name %in% c("Bur Oark") ~ "Bur Oak",
+    common_name %in% c("Box Elder") ~ "Boxelder Maple",
+    common_name %in% c("Red Oak","Northern Red Oak") ~ "Northern Red Oak",
+    common_name %in% c("Blackgum","Black Gum","Tupelo","Pepperidge") ~ "Black Gum",
+    common_name %in% c("Redbud","Red Bud") ~ "Eastern Redbud",
+    common_name %in% c("Elm") ~ "American Elm",
+    common_name %in% c("Hornbeam") ~ "American Hornbeam",
+    common_name %in% c("Plum") ~ "American Plum",
+    common_name %in% c("White Pine") ~ "Eastern White Pine",
+    common_name %in% c("Sweet Gum","Sweetgum") ~ "American Sweetgum",
+    common_name %in% c("Sycamore") ~ "American Sycamore",
+    common_name %in% c("Chokeberry") ~ "Black Chokeberry",
+    common_name %in% c("Yellowwood") ~ "Kentucky Yellowwood",
+    common_name %in% c("Hophornbeam") ~ "American Hophornbeam",
+    common_name %in% c("Shell Bark Hickory") ~ "Shellbark Hickory",
+    common_name %in% c("Elderberry","American Elder") ~ "American Elderberry",
+    common_name %in% c("Cottonwood") ~ "Eastern Cottonwood",
+    common_name %in% c("Sweet Bay Magnolia") ~ "Sweetbay Magnolia",
+    common_name %in% c("Hazelnut") ~ "American Hazelnut",
+    common_name %in% c("Persimmon") ~ "American Persimmon",
+    common_name %in% c("Horse Chestnut") ~ "Horsechestnut",
+    common_name %in% c("Flowering Cherry") ~ "Yoshino Flowering Cherry",
+    common_name %in% c("Viburnum") ~ "Blackhaw Viburnum",
+    common_name %in% c("Hawthorn") ~ "Washington Hawthorn",
+    common_name %in% c("Tulip Tree") ~ "Tulip Poplar",
+    TRUE ~ common_name
+  )) |>
+left_join(species_data, by = "common_name") |>
+  mutate(genus_species = case_when(
+      is.na(genus_species) ~ genus_species_lu, 
+         TRUE ~ genus_species
+       )) |>
+  mutate(itree = itree_lu) |>
+  dplyr::select(-genus_species_lu, -itree_lu) |>
+  mutate(genus_species = str_replace_all(str_to_sentence(genus_species), "_", " ")) |>
+  mutate(genus_species = case_when(
+    genus_species == "Na na" ~ "prunus_americana",
+    TRUE ~ genus_species
+  )) |>
+  mutate(address = str_squish(address)) |>
+  mutate(city = case_when(
+    city %in% c("Lutherville Timonium") ~ "Lutherville",
+    city %in% c("Timonion") ~ "Timonium",
+    city %in% c("Towso", "Towsom") ~ "Towson",
+    city %in% c("Owing Mills") ~ "Owings Mills",
+    city %in% c("Landswone") ~ "Lansdowne",
+    TRUE ~ city
+  )) |>
+  mutate(zip_code = case_when(
+    zip_code == 2121 ~ 21212,
+    zip_code == 211136 ~ 21136,
+    zip_code == 212139 ~ 21239,
+    zip_code == 2129 ~ 21229,
+    zip_code == 11111 ~ 21228,
+    TRUE ~ zip_code
+  )) |>
+  mutate(city = case_when(
+    address == "112 S Marenick Ave" ~ "Catonsville",
+    TRUE ~ city
+  )) |>
+  mutate(state = case_when(
+    is.na(state) ~ "MD",
+    TRUE ~ state
+  )) |>
+  dplyr::select(-county) |>
+  left_join(county_data, by = "city") |> 
+  mutate(county = ifelse(is.na(county), "Neither", county)) |>
+  mutate(giveaway_location = case_when(
+    str_detect(giveaway_location, "Winand ES") ~ "Winand ES",
+    str_detect(giveaway_location, "Westy Walk") ~ "Westy Walk",
+    str_detect(giveaway_location, "Greektown-") ~ "Greektown - John Ruhrah EMS",
+    str_detect(giveaway_location, "Herring Run Nursery") ~ "Herring Run Nursery",
+    str_detect(giveaway_location, "Langston Hughes Community Center") ~ "Langston Hughes Community Center",
+    str_detect(giveaway_location, "Stillmeadow Community Fellowship") ~ "Stillmeadow Community Fellowship",
+    str_detect(giveaway_location, "Gateway Park at Darley Park") ~ "Gateway Park at Darley Park",
+    str_detect(giveaway_location, "Ridgely Manor Park") ~ "Ridgely Manor Park",
+    str_detect(giveaway_location, "32nd Street Farmers Market") ~ "32nd Street Farmers Market",
+    str_detect(giveaway_location, "Washington Hill Fall Community Day") ~ "Washington Hill Fall Community Day",
+    str_detect(giveaway_location, "Cherry Hill Urban Garden") ~ "Cherry Hill Urban Garden",
+    str_detect(giveaway_location, "JFX Farmers Market") ~ "JFX Farmers Market",
+    str_detect(giveaway_location, "Tree Giveaway - Fall 2021") ~ NA_character_,
+    str_detect(giveaway_location, "Tree Giveaway - Fall 2023") ~ NA_character_,
+    str_detect(giveaway_location, "Tree Giveaway - Fall 2019") ~ NA_character_,
+    str_detect(giveaway_location, "NA") ~ NA_character_,
+    TRUE ~ giveaway_location
+  )) |>
+    mutate(zip_code = as.character(zip_code)) |>
+  dplyr::select(giveaway_location, year, season, date, common_name, genus_species, itree, address, city,   state, zip_code, county, first_name, last_name, phone, email)
+  
+```
+
+
+#12 Save out
+```{r}
+
+giveaway_total |>
+  write_csv(paste0("output_data/giveaway_total_bwb_", Sys.Date(), ".csv"))
+  
+```
+

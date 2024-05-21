@@ -1,0 +1,761 @@
+---
+title: "03_geocode"
+author: "Eduardo (with Dexter H Locke, PhD)"
+date: "`r format(Sys.time())`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# 0 load libraries and read in data----
+```{r message=FALSE}
+
+# List all of your packages here
+
+knitr::opts_chunk$set(echo = TRUE)
+
+packs <-c(
+            'janitor'    # cleans things up, also pipe-friendly cross-tabulations
+           , 'sf'         # for spatial data support
+          , 'tidyverse'  # cuz
+          , 'tidylog'    # prints out what was done in dplyr and tidyr
+          , 'magrittr'   # for the pipe
+          , 'mapview'    # web maps for zooming and panning around
+          #, 'beepr'      # makes noise when things are done!
+          , 'tictoc'     # timing things.
+          , 'raster'
+          # , 'doParallel' # does what is says! PARALLEL
+          # 'broom.mixed',# tidiers for mixed models AND nlme::gls()
+          # , 'lubridate'   # DATES!
+          , 'tidygeocoder' # geo coding
+          # , 'leaflet' #creating the interactive mapping elements (more specific)
+          )     
+
+# IF the packages in 'packs' are not already installed, install them
+# OTHERWISE do NOTHING
+if (length(setdiff(packs, rownames(installed.packages()))) > 0) {
+install.packages(setdiff(packs, rownames(installed.packages())))
+}
+
+# lapply(packs, library, character.only = TRUE)
+# this actually loads them with library(package_name)
+vapply(packs, library, character.only = TRUE, logical(1), logical.return = TRUE, quietly = TRUE)
+```
+
+# 1 Read in 
+```{r}
+giveaway_total <-
+  read_csv("output_data/giveaway_total_bwb_2024-04-15.csv")
+```
+
+# 2 Geocode 
+```{r}
+giveaway_test <- 
+  giveaway_total |>
+  geocode(
+    street = address,
+    city = city,
+    state = state,
+    postalcode = zip_code,
+    return_addresses = TRUE,
+    verbose = TRUE
+  )
+
+view(giveaway_test)
+
+giveaway_test <-
+  giveaway|>
+  write_csv(paste0("output_data/giveaway_total_bwb_geocoded_", Sys.Date(), ".csv")) |>
+  filter(!is.na(lat))
+```
+
+# 3 Geocode, again
+```{r}
+#Creating the list without any geocoding
+
+#Fixing incorrect addresses
+giveaway_test_v1 <-
+  read_csv("output_data/giveaway_total_bwb_geocoded2024-04-22.csv") |>
+  filter(is.na(lat)) |>
+  rename(city = "city...9", state = "state...10") |>
+  dplyr::select(-"city...18", -"state...19", -"postalcode", -"street", -"lat", -"long") |>
+  geocode(
+    street = address,
+    state = state,
+    postalcode = zip_code,
+    return_addresses = TRUE,
+    verbose = TRUE
+  ) 
+
+#Writing it into an csv
+giveaway_test_v1 |>
+write_csv(paste0("output_data/giveaway_total_v1_bwb_geocoded_", Sys.Date(), ".csv"))
+
+#Fixing second round addresses,
+giveaway_test_v2 <-
+    readr::read_csv("output_data/giveaway_total_v1_bwb_geocoded_2024-04-28.csv") |>
+    filter(is.na(lat)) |>
+    mutate(city = case_when(
+      address %in% c("3946 Whispering Meadows","4102 Dutchmill Road","29 Adrian Ct") ~ "Randallstown",
+      address == "4505 Lithicum Road" ~ "Dayton",
+      address == "7601 Babikow Avenue" ~ "Rosedale",
+      address %in% c("2012 Rocky Rt Road","609 Dunwirth Way","1313 Mable Ave")~ "Essex",
+      address %in% c("9310 Montego Road","7918 Daleesford Rd","2524 Wyecliffe Rd") ~ "Parkville",
+      address %in% c("806 Fairway Dr Fairway Dr Road","623 Theford Rd","109 Wapaix Lane") ~ "Towson",
+      address %in% c("12727 Green Spring Ave","9606 Fabel Dr") ~ "Owings Mills",
+      address == "6624 Latrobe Falls Rd" ~ "Elkridge",
+      address == "8 Bothwell Garth Cres" ~ "Nottingham",
+      address == "13707 Summer Hill Way" ~ "Phoenix",
+      address == "5149 Talbots Aly" ~ "Ellicott City",
+      address == "2303 Potspring Rd" ~ "Timonium",
+      address %in% c("1701 Beaverbrook Ln","10301 Bolsey Rd") ~ "Cockeysville",
+      address %in% c("112 S. Morerick Rd") ~ "Catonsville",
+      address == "10745 Oldcourt Rd" ~ "Woodstock",
+      address == "5601 Fair Oak Ave" ~ "Hanover", 
+      address == "4302 Sihler Oaks Ter" ~ "Owings Mills",
+      address == "9000 Adobe Rd" ~ "Randallstown",
+      address == "512 Adobe Rd" ~ "Randallstown",
+      address == "1905 Puttyhill Ave" ~ "Parkville",
+      address == "2448 Ellis Ave" ~ "Parkville",
+      address == "100 St John's Rd" ~ "Ellicott City",
+      address == "5113 Kramer Ave" ~ "Baltimore",
+      address == "4 Honey Sprung Ct" ~ "Timonium",
+      address == "115 Melanchthon Ave" ~ "Timonium",
+      address == "2303 Potspring Rd" ~ "Timonium",
+      address == "6 Northhampton Rd" ~ "Timonium",
+      address == "1706 Summit" ~ "Halethorpe",
+      address == "8900 Tarplys Circle" ~ "Rosedale",
+      address == "8008 Ridgly Oak Rd" ~ "Parkville",
+      address == "10 Selsed Gth" ~ "Lutherville",
+      address == "31 Silver Birch" ~ "Owings Mills",
+      address == "1301 Edmonson Ave" ~ "Catonsville",
+      address == "8525 West Ford Rd" ~ "Timonium",
+      address == "1237 Sulphuric Spring Rd" ~ "Halethorpe",
+      address == "3 Swan Hill Dr" ~ "Pikesville",
+      address == "3611 Marriotts Ln" ~ "Windsor Mill",
+      address == "11502 St Davids Ln" ~ "Timonium",
+      address == "8500 Allenswood Rd" ~ "Randallstown",
+      address == "2216 Potspring Rd" ~ "Timonium",
+      address == "9 Edgmoor Rd" ~ "Timonium",
+      address == "727 Earls Beech Rd" ~ "Middle River",
+      address == "300 Five Fams Ln" ~ "Timonium",
+      address %in% c("16500 Jm Pearce Road","16500 Jm Pearce Rd") ~ "Monkton",
+      address == "12724 Gores Mills Rd" ~ "Reisterstown",
+      address == "26 Edmundson Ridge Rd" ~ "Catonsville",
+      address == "49 Holmhurst Ave" ~ "Catonsville",
+      address == "300 Lincoln Ave M" ~ "Rockville",
+      address == "1317 Saulfer Spring Rd" ~ "Halethorpe",
+      address == "7906 Oak Leigh Rd" ~ "Parkville",
+      address == "5325 Swet Air Rd" ~ "Baldwin",
+      address == "1900 East Land Rd" ~ "Towson",
+      TRUE ~ city
+    )) |>
+    mutate(zip_code = case_when(
+      address == "300 Della Avenue" ~ 21206,
+      address == "6400 Chestwood Rd" ~ 21239,
+      address == "3200 Elerslie Ave" ~ 21218,
+      address == "5601 Fair Oak Ave" ~ 21076,
+      address == "2501 Rosoline Ave" ~ 21216,
+      address == "100 St John's Rd" ~ 21042,
+      address == "3733 Claremount Rd" ~ 21215,
+      address == "3402 Cardenas Rd" ~ 21213,
+      address == "3122 Key On Ave" ~ 21213,
+      address == "3808 Fairway St" ~ 21216,
+      address == "3458 Spellman Rd" ~ 21230,
+      address == "300 East 30 St" ~ 21218,
+      address == "526 Chateaux Ave" ~ 21212,
+      address == "300 Lincoln Ave M" ~ 20850,
+      TRUE ~ zip_code
+    )) |>
+    mutate(address = case_when(
+      address == "8252 Brittle Road" ~ "8252 Brattle Road",
+      address == "7706 Eden Rock Way" ~ "7706 Eden Roc Way",
+      address == "3208 Wood Valley Dr" ~ "3208 Woodvalley Dr",
+      address == "4505 Lithicum Road" ~ "4505 Linthicum Road",
+      address == "7007 Copleigh Road" ~ "7007 Copeleigh Road",
+      address == "8811 Ridgely's Chance Drive" ~ "8811 Ridgelys Chance Drive",
+      address == "2800 Overland Road" ~ "2800 Overland Ave",
+      address == "2822 Cheswolde Avenue" ~ "2822 Cheswolde Rd",
+      address == "P.O. Box 44374" ~ NA_character_,
+      address == "2809 Grindon Lane" ~ "2809 Grindon Ave",
+      address == "7601 Babikow Avenue" ~ "7601 Babikow Rd",
+      address == "7007 Copleigh Road" ~ "7007 Copeleigh Road",
+      address == "5324 Alegheny Avenue" ~ "5324 Allegheny Avenue",
+      address == "632 St. John's Road" ~ "632 St Johns Rd",
+      address == "2012 Rocky Rt Road" ~ "2011 Rocky Point Rd",
+      address == "609 Dunwirth Way" ~ "609 Dunworth Way",
+      address == "300 Della Avenue" ~ "300 Dale Ave",
+      address == "2810 Wesfield Ave" ~ "2810 Westfield Ave",
+      address == "3201 Tyndall Avenue" ~ "3201 Tyndale Ave",
+      address == "3100 Wastfield Avenue" ~ "3100 Westfield Ave",
+      address == "4524 Main Field Ave Avenue" ~ "4524 Mainfield Ave",
+      address == "2202 Deerfren Crescent Street" ~ "2202 Deerfern Crescent",
+      address == "3 Southfield Place Avenue" ~ "3 Southfield Pl",
+      address == "526 S Newrerk Street" ~ "526 S Newkirk Street",
+      address == "606 Rapolla Street" ~ "606 Rappolla Street",
+      address == "822 Rapolla Street" ~ "822 Rappolla Street",
+      address == "9310 Montego Road" ~ "9310 Montego Ave",
+      address == "806 Fairway Dr Fairway Dr Road" ~ "806 Fairway Dr",
+      address == "1247 New Field Road" ~ "1247 Newfield Road",
+      address == "853 Patk Avenue" ~ "853 Park Avenue",
+      address == "1900 Eagle Dr Drive" ~ "1900 Eagle Dr",
+      address == "124 B Station North Mews Alley" ~ "124 Station North Mews",
+      address == "641 New Kirk Street" ~ "641 S Newkirk St",
+      address == "6224 Everall All" ~ "6224 Everall Ave",
+      address == "409 S. East" ~ "409 S East Ave",
+      address == "3551 New Land Road" ~ "3551 Newland Road",
+      address == "6209 Birchwoodave." ~ "6209 Birchwood Ave",
+      address == "1336heatherhill Rd" ~ "1336 Heather Hill Rd",
+      address == "109 Croyden Rd" ~ "109 Croydon Rd",
+      address == "113 N Lucerne Ave" ~ "113 N Luzerne Ave",
+      address == "12727 Green Spring Ave" ~ "12727 Greenspring Ave",
+      address == "15 Glenciffe Cir" ~ "15 Glencliffe Circle",
+      address == "2205 Pellham Ave." ~ "2205 Pelham Ave",
+      address == "222 S Foulton Ave" ~ "222 S Fulton Ave",
+      address == "2936 Gilford Ave" ~ "2936 Guilford Ave",
+      address == "5112 Whitford Ave" ~ "5112 Whiteford Ave",
+      address == "616 St. Dunstins Rd" ~ "616 St Dunstans Rd",
+      address == "6624 Latrobe Falls Rd" ~ "6624 Latrobe Falls",
+      address == "7918 Daleesford Rd" ~ "7918 Dalesford Rd",
+      address == "801 Mont Pelier St" ~ "801 Montpelier St",
+      address == "725 Fallsway Way" ~ "725 Fallsway",
+      address == "1614 Shady Side Sq" ~ "1614 Shadyside Rd",
+      address == "2941 Keswick Ave" ~ "2941 Keswick Rd",
+      address == "29 Adrian Ct" ~ "29 Adrianne Ct",
+      address == "3108 Beverely Rd" ~ "3108 Beverly Rd",
+      address == "722 Hollin Rd" ~ "722 Hollen Rd",
+      address == "704 Deepdene Ave" ~ "704 Deepdene Rd",
+      address == "1313 Mable Ave" ~ "1313 Maple Ave",
+      address == "8 Bothwell Garth Cres" ~ "8 Bothwell Garth",
+      address == "9606 Fabel Dr" ~ "9606 Fable Dr",
+      address == "6204 Mosway Aly" ~ "6204 Mossway",
+      address == "13707 Summer Hill Way" ~ "13707 Summer Hill Dr",
+      address == "1623 Theford Rd" ~ "1623 Thetford Rd",
+      address == "5149 Talbots Aly" ~ "5149 Talbots Landing",
+      address == "6012 Alta Ave Ave" ~ "6012 Alta Ave",
+      address == "2705 Huntington Ave" ~ "2705 Huntingdon Ave",
+      address == "2903 Bauernwood Rd" ~ "2903 Bauernwood Ave",
+      address == "1005 Register Ave" ~ "1005 Regester Ave",
+      address == "2303 Potspring Rd" ~ "2303 Pot Spring Rd",
+      address == "112 S. Morerick Rd" ~ "112 S Morerick Ave",
+      address == "3130 Olando Ave" ~ "3130 Orlando Ave",
+      address == "2524 Wyecliffe Rd" ~ "2524 Wycliffe Rd",
+      address == "0 Lochlea And Kelley Ave" ~ NA_character_,
+      address == "7921 Ruway Aly" ~ "7921 Ruxway Rd",
+      address == "6400 Chestwood Rd" ~ "6400 Crestwood Rd",
+      address == "1326 Illegible Rd" ~ NA_character_,
+      address == "3300 Illegible Way" ~ NA_character_,
+      address == "3828 Ednore Rd" ~ "3828 Ednor Rd",
+      address == "221 Stoney Run Ln" ~ "221 Stony Run Ln",
+      address == "3200 Elerslie Ave" ~ "3200 Ellerslie Ave",
+      address == "1701 Beaverbrook Ln" ~ "1701 Beaver Brook Ln",
+      address == "5904 Highgate Rd" ~ "5904 Highgate Dr",
+      address == "10301 Bolsey Rd" ~ "1030 Bosley Rd",
+      address == "5904 Highgate Rd" ~ "5904 Highgate Dr",
+      address == "2619 West Belvedere c Ave" ~ "2619 W Belvedere Ave",
+      address == "6101 Maywood Avenue Rd" ~ "6101 Maywood Ave",
+      address == "1442 Bonsai St" ~ "1442 Bonsal St",
+      address == "819 W Berry St" ~ NA_character_,
+      address == "1633 Woodborne Ave" ~ "1633 Woodbourne Ave",
+      address == "4012 Hickory Ave Ave" ~ "4012 Hickory Ave",
+      address == "2523 James St James St" ~ "2523 James St",
+      address == "5104 Spring Lake Way Way" ~ "5104 Springlake Way",
+      address == "25 E Motgomery St" ~ "25 E Montgomery St",
+      address == "302 Ridgemede St" ~ "302 Ridgemede Rd",
+      address == "212 Goddale Rd" ~ "212 Goodale Rd",
+      address == "5109 Falls Rd Terr Rd" ~ "5109 Falls Rd",
+      address == "1304 Welden Ave" ~ "1304 Weldon Ave",
+      address == "3967 Hickory Ave Hickory Ave" ~ "3967 Hickory Ave",
+      address == "5505 Else Ode Ave" ~ "5505 Elsrode Ave",
+      address == "5601 Fair Oak Ave" ~ "5601 Fair Oak Dr",
+      address == "3003 Rosekamp Ave" ~ "3003 Rosekemp Ave",
+      address == "4427 Rasp Ave" ~ "4427 Raspe Ave",
+      address == "2501 Rosoline Ave" ~ "2501 Roslyn Ave",
+      address == "4302 Sihler Oaks Ter" ~ "4302 Sihler Oaks Trail",
+      address == "105 W 39 St" ~ "105 W 39th St",
+      address == "616 Winsns Way" ~ "616 Winans Way",
+      address == "3712 Belle Ave Ave" ~ "3712 Belle Ave",
+      address == "1300 Floater Avenue Ave" ~ NA_character_,
+      address == "1905 Puttyhill Ave" ~ "1905 Putty Hill Ave",
+      address == "2448 Ellis Ave" ~ "2448 Ellis Rd",
+      address == "5956 Glenfalls Ave" ~ "5956 Glen Falls Ave",
+      address == "33 North Montfort Ave" ~ "33 Montford Ave",
+      address == "3800 Falls Sq" ~ NA_character_,
+      address == "5018 Plimouth Rd" ~ "5018 Plymouth Rd",
+      address == "135 N Belmore Ave" ~ "135 Belnord Ave",
+      address == "2712 Huntington Ave Ave" ~ "2712 Huntingdon Ave",
+      address == "238 Mallowhill Rd" ~ "238 Mallow Hill Rd",
+      address == "2945 Keswick Ave" ~ "2945 Keswick Rd",
+      address == "3 Elmhurdt Rd" ~ "3 Elmhurst Rd",
+      address == "100 St John's Rd" ~ "100 St Johns Ln",
+      address == "2102 N Cliff Dr" ~ "2102 Northcliff Dr",
+      address == "1609 Kingway Rd" ~ "1609 Kingsway Rd",
+      address == "1709 Duntalk Ave" ~ "1709 Dundalk Ave",
+      address == "2140 Drude Park Dr" ~ "2140 Druid Park Dr",
+      address == "615 Reservoir" ~ "615 Reservoir St",
+      address == "314 W Coldspring Ln" ~ "314 W Cold Spring Ln",
+      address == "4615 Schenly Rd" ~ "4615 Schenley Rd",
+      address == "5719 Uffington Pd" ~ "5719 Uffington Rd",
+      address == "2602 Guildford Ave" ~ "2602 Guilford Ave",
+      address == "3733 Claremount Rd" ~ "3733 Clarinth Rd",
+      address == "330 Radner Rd" ~ "330 Radnor Rd",
+      address == "4601 Waltzer Ave" ~ "4601 Walther Ave",
+      address == "3402 Cardenas Rd" ~ "3402 Cardenas Ave",
+      address == "3503newland Rd" ~ "3503 Newland Rd",
+      address == "1118 Saint Paul" ~ "1118 St Paul St",
+      address == "3600 Greenmount Ave 2r" ~ "3600 Greenmount Ave",
+      address == "4810 Cordella Ave" ~ "4810 Cordelia Ave",
+      address == "4906 Nelson" ~ "4906 Nelson Ave",
+      address == "1009 Poplar Gove" ~ "1009 Poplar Grove St",
+      address == "111 N Brdway" ~ "111 N Broadway",
+      address == "4320 Newoirt Ave" ~ "4320 Newport Ave",
+      address == "3122 Key On Ave" ~ "3122 Kenyon Ave",
+      address == "3818 Calloway Ave" ~ "3818 Callaway Ave",
+      address == "238 Mellow Hill Rd" ~ "238 Mallow Hill Rd",
+      address == "3702 Park Cr" ~ NA_character_,
+      address == "5313 Brabandt" ~ "5313 Brabant Rd",
+      address == "2514 Eaat Fairmount Ave" ~ "2514 East Fairmount Ave",
+      address == "3008 Overvand" ~ "3008 Overland Ave",
+      address == "2811jefferson St" ~ "2811 Jefferson St",
+      address == "2712 Clyburn Ave" ~ "2712 Cylburn Ave",
+      address == "234 S Washington" ~ "234 S Washington St",
+      address == "106 Birkhead St" ~ "106 Birckhead St",
+      address == "3808 Fairway St" ~ "3808 Fairway Ave",
+      address == "2802 Ecodale Ave" ~ "2802 Echodale Ave",
+      address %in% c("935 Wilmount Ct","935 Wilmont") ~ "935 Wilmot Ct",
+      address == "314 W Coldspring Ln" ~ "314 W Cold Spring Ln",
+      address == "2225 Mules Way" ~ NA_character_,
+      address == "3551 Newlamd Rd" ~ "3551 Newland Rd",
+      address == "106 Birkhead St" ~ "106 Birckhead St",
+      address == "7010 Rock Sream Ct" ~ "7010 Rock Stream Ct",
+      address == "2225 Ewtaw" ~ "2225 Eutaw Pl",
+      address == "3212 Lindale Ave" ~ "3212 Lyndale Ave",
+      address == "3458 Spellman Rd" ~ "3458 Spelman Rd",
+      address == "3229 Montevello Terrace" ~ "3229 Montebello Terrace",
+      address == "3525 Dennison Rd" ~ "3525 Denison Rd",
+      address == "4617 Kings Mill Wy" ~ "4617 Kings Mill Way",
+      address == "4 Honey Sprung Ct" ~ "4 Honey Spring Ct",
+      address == "5 Jones Fall Ter" ~ "5 Jones Falls Ter",
+      address == "1353 West 42 St" ~ "1353 West 42nd St",
+      address == "6 Doret Hill Ct" ~ "6 Dorset Hill Ct",
+      address == "3231 Ryerson Circ" ~ "3231 Ryerson Cir",
+      address == "115 Jane Lin Dr" ~ "115 Janelin Dr",
+      address == "410 Fulcroft St" ~ "410 Folcroft St",
+      address == "115 Melanchthon Ave" ~ "115 Melancthon Ave",
+      address == "3106 Tyndale Rd" ~ "3106 Tyndale Ave",
+      address == "2303 Potspring Rd" ~ "2303 Pot Spring Rd",
+      address == "6 Northhampton Rd" ~ "6 Northampton Rd",
+      address == "5505 Winthrop Ave" ~ "5505 Winthrope Ave",
+      address == "1706 Summit" ~ "1706 Summit Ave",
+      address == "4 Bellenore Rd" ~ "4 Bellemore Rd",
+      address == "3007 Huntington St" ~ "3007 Huntingdon Ave",
+      address == "6205 Elm Bank Ave" ~ "6205 Elmbank Ave",
+      address == "3804 Green Mount Avenue" ~ "3804 Greenmount Ave",
+      address == "4400 Clydesdales E" ~ "4400 Clydesdale Ave",
+      address == "2702 St Paul" ~ "2702 St Paul St",
+      address == "617 St. Dunstan’s" ~ "617 St Dunstans Rd",
+      address == "3700 Ridgecroft Row" ~ "3700 Ridgecroft Rd",
+      address == "1132 Cedercroft Road" ~ "1132 Cedarcroft Rd",
+      address == "5921fairwood Ave" ~ "5921 Fairwood Ave",
+      address == "5921 Fairwwod Ave" ~ "5921 Fairwood Ave",
+      address == "1107 Litchfield Row" ~ "1107 Litchfield Rd",
+      address == "8008 Ridgly Oak Rd" ~ "8008 Ridgely Oak Rd",
+      address == "2408 Mcelderly St" ~ "2408 McElderry St",
+      address == "2410 Mcelderly St" ~ "2410 McElderry St",
+      address == "1709 Dunduk Ave" ~ "1709 Dundalk Ave",
+      address == "3700 Ridge Croft" ~ "3700 Ridgecroft Rd",
+      address == "802 North Linwood St" ~ "802 N Linwood Ave",
+      address == "2411 Mckelderry St" ~ "2411 McElderry St",
+      address == "3924 Rokevy Rd" ~ "3924 Rokeby Rd",
+      address == "900 N.central" ~ "900 N Central Ave",
+      address == "829 East Mount Pelierave" ~ NA_character_,
+      address == "300 East 30 St" ~ "300 E 30th St",
+      address == "6206 Tremore Road" ~ "6206 Tramore Rd",
+      address == "532 Annabele" ~ "532 Annabel Ave",
+      address == "1208 Register Ave" ~ "1208 Regester Ave",
+      address == "4130 Dorris Ave" ~ "4130 Doris Ave",
+      address == "3710 Tenth St" ~ "3710 10th St",
+      address == "103 West 11 Avenue" ~ "103 W 11th Ave",
+      address == "1617 N Broadway St" ~ "1617 N Broadway",
+      address == "7368 Edsworth Ave" ~ "7368 Edsworth Rd",
+      address == "406 West Gate Rd" ~ "406 Westgate Rd",
+      address == "10 Selsed Gth" ~ "10 Selsed Garth",
+      address == "620 Tenable Ave" ~ "620 Venable Ave",
+      address == "411 N Charles St 2b" ~ "411 N Charles St",
+      address == "339 E 31sr Street" ~ "339 E 31st St",
+      address == "2535 Reade St" ~ NA_character_,
+      address == "2201 Angelina Terrace" ~ "2201 Angelica Ter",
+      address == "1201 West Mount Royal" ~ "1201 W Mt Royal Ave",
+      address == "526 Chateaux Ave" ~ "526 Chateau Ave",
+      address == "636 Deepens Rd" ~ "636 Deepdene Rd",
+      address %in% c("2906 Edgecom Cir","2906 Edgecomb Cir") ~ "2906 Edgecombie Cir S",
+      address == "960 Fells Street" ~ "960 Fell St",
+      address == "206 Brandish Ave" ~ "2206 Braddish Ave",
+      address == "4326 East Beaver" ~ NA_character_,
+      address == "3535 New Land Rd" ~ "3535 Newland Rd",
+      address == "5304 Wendlley Road" ~ "5304 Wendley Rd",
+      address == "2601 Tandy Rd" ~ "2601 Taney Red",
+      address == "1921 Saint Paul" ~ "1921 St Paul St",
+      address == "1243 Hubert Streete" ~ NA_character_,
+      address == "31 Silver Birch" ~ "31 Silver Birch Ct",
+      address == "1035 W Berry St" ~ "1035 W Barre St",
+      address == "1301 Edmonson Ave" ~ "1301 Edmondson Ave",
+      address == "612 S Charles" ~ "612 S Charles St",
+      address == "5910 Barkside Dr" ~ NA_character_,
+      address == "8525 West Ford Rd" ~ "8525 Westford Rd",
+      address == "9 W Preston Sr" ~ "9 W Preston St",
+      address == "2812 Halcyon Abe" ~ "2812 Halcyon Ave",
+      address == "2825 Golfers Avenue" ~ "2825 Guilford Ave",
+      address == "2023 Druid Hill Park Dr" ~ "2023 Druid Park Dr",
+      address == "721 South Muntford Ave" ~ "721 S Montford Ave",
+      address == "2613 Golfers Avenue" ~ "2613 Guilford Ave",
+      address == "1717 Bolton At" ~ "1717 Bolton St",
+      address == "1237 Sulphuric Spring Rd" ~ "1237 Sulphur Spring Rd",
+      address == "2800 Gilford Avenue" ~ "2800 Guilford",
+      address == "303 East High Field Rd" ~ "303 E Highfield Rd",
+      address == "101 North Wolf Street" ~ "101 N Wolfe St",
+      address == "715 Win And Way" ~ "715 Winans Way",
+      address == "3125 N Calvert, Unit 2" ~ "3125 N Calvert St",
+      address == "16 West My Vernon Place" ~ "16 West Mt Vernon Pl",
+      address == "2704 Saint Paul" ~ "2704 St Paul St",
+      address == "107 E Northern Pkway" ~ "107 E Northern Pkwy",
+      address == "2812 Cheswalode Rd" ~ "2812 Cheswolde Rd",
+      address == "5500 Tremors Rd" ~ "5500 Tramore Rd",
+      address == "510 Old Orachard" ~ "510 Old Orchard Rd",
+      address == "1410 Hotline St" ~ "1410 Hollins St",
+      address == "2415 Utah Place" ~ "2415 Eutaw Pl",
+      address == "7valkey Glen Court" ~ "7 Valley Glen Court",
+      address == "407 Southwest" ~ "407 Southway",
+      address == "5025 Crossword Ave" ~ "5025 Crosswood Ave",
+      address == "600 Gresham Ave" ~ "600 Evesham Ave",
+      address == "2501 Talbots Road" ~ "2501 Talbot Rd",
+      address == "2102 N Cliff Dr" ~ "2102 Northcliff Dr",
+      address == "3828 Endor Rd" ~ "3828 Ednor Rd",
+      address == "1800 Fairbanks Road" ~ "1800 Fairbank Road",
+      address == "107 South Population St" ~ NA_character_,
+      address == "5905 Grace" ~ "5905 Grace Ave",
+      address == "1323 West Fayette St Unit }" ~ "1323 W Fayette St",
+      address == "3720 6th" ~ "3720 6th St",
+      address == "1300 W 41 St" ~ "1300 W 41st St",
+      address == "803 E Lake" ~ "803 E Lake Ave",
+      address == "1300 W 41 St" ~ "1300 W 41st St",
+      address == "2432 Gilford Ave" ~ "2432 Guilford Ave",
+      address == "4205 Heckle Ave" ~ "4205 Heckel Ave",
+      address == "306 W 31 St" ~ "306 W 31st St",
+      address == "1300 West 41 St" ~ "1300 W 41st St",
+      address == "4629 Colehern Rd" ~ "4629 Coleherne Rd",
+      address == "4242 Parkton Ave" ~ "4242 Parkton St",
+      address == "1227 Cooksr" ~ "1227 Cooksie St",
+      address == "5507 Greenlea Rd" ~ "5507 Greenleaf Rd",
+      address == "3600 Dennison Rd" ~ "3600 Denison Rd",
+      address == "11502 St David's Ln" ~ "11502 St Davids Ln",
+      address == "6411 Krill St" ~ "6411 Kriel St",
+      address == "4242 Parkton Ave" ~ "4242 Parkton St",
+      address == "3702 Calloway Ave" ~ "3702 Callaway Ave",
+      address == "4231 Elsa Ter Apt 2" ~ "4231 Elsa Ter",
+      address == "200 Medwick Garch E" ~ NA_character_,
+      address == "2216 Potspring Rd" ~ "2216 Pot Spring Rd",
+      address == "4608 Cedar Gardens Rd" ~ "4608 Cedar Garden Rd",
+      address == "9 Edgmoor Rd" ~ "9 Edgemoor Rd",
+      address == "727 Earls Beech Rd" ~ "727 Earls Beach Rd",
+      address == "300 Five Fams Ln" ~ "300 Five Farms Ln",
+      address %in% c("16500 Jm Pearce Road","16500 Jm Pearce Rd") ~ "16500 Jm Pearce Rd",
+      address == "12724 Gores Mills Rd" ~ "12724 Gores Mill Rd",
+      address == "509 N Rockglen Rd" ~ "509 N Rock Glen Rd",
+      address == "26 Edmundson Ridge Rd" ~ "26 Edmondson Ridge Rd",
+      address == "49 Holmhurst Ave" ~ "49 Holmehurst Ave",
+      address == "300 Lincoln Ave M" ~ "300 Lincoln Ave",
+      address == "317 N Bend Road Unit 2" ~ "317 N Bend Rd",
+      address == "3726 Claranell Rd" ~ "3726 Clarenell Rd",
+      address == "718 Lyndhurst Steert" ~ "718 Lyndhurst St",
+      address == "1317 Saulfer Spring Rd" ~ "1317 Sulphur Spring Rd",
+      address == "2307 Popler Drive" ~ "2307 Poplar Dr",
+      address == "5110 Fredrick Ave" ~ "5110 Frederick Ave",
+      address == "7906 Oak Leigh Rd" ~ "7906 Oakleigh Rd",
+      address == "2010 Breitwert Avenur" ~ "2010 Breitwert Ave",
+      address == "811 Bennighaus Rd" ~ "811 Benninghaus Rd",
+      address == "5325 Swet Air Rd" ~ "5325 Sweet Air Rd",
+      address == "403 North Capel Gate Lane" ~ "403 N Chapel Gate Ln",
+      address == "419 West Gate Rd" ~ "419 Westgate Rd",
+      address == "2110 Western Run Drr" ~ "2110 Western Run Dr",
+      address == "1900 East Land Rd" ~ "1900 Eastland Rd",
+      address == "1126 E 36 St" ~ "1126 E 36th St",
+      address == "5303 Wyndholme Cir #404" ~ "5303 Wyndholme Cir",
+      TRUE ~ address
+    )) |>
+  mutate(lat = case_when(
+    address == "6301 Blenneim Road" ~ 39.371954,
+    address == "209 S Tyrone Avenue" ~ 39.38111184504074,
+    address == "124 Station North Mews" ~ 39.30944903183306,
+    address == "2103 Brookefield Ave" ~ 39.31232668099341,
+    address == "4207 Skyview Rd" ~ 39.33961206111882,
+    address == "2290 W Valley Ln" ~  39.691518299760254,
+    address == "625 Ponte Villas S" ~ 39.27856942473068,
+    TRUE ~ lat
+  )) |>
+  mutate(long = case_when(
+    address == "6301 Blenneim Road"  ~ -76.616681,
+    address == "209 S Tyrone Avenue" ~  -76.62136455950767, 
+    address == "124 Station North Mews" ~ -76.61383836759138,
+    address == "2103 Brookefield Ave" ~ -76.63205387457182,
+    address == "4207 Skyview Rd" ~ -76.63618330000001,
+    address == "2290 W Valley Ln" ~ -77.07841597357525,
+    address == "625 Ponte Villas S" ~ -76.60476238468976,
+    TRUE ~ long
+  )) |>
+  filter(!is.na(address)) |>
+  dplyr::select(-state...18, -zip_code) |>
+  rename(zip_code = postalcode, state = state...10)
+  
+#Fixing incorrect addresses
+# giveaway_test_v2_geocoded <-
+#   giveaway_test_v2 |>
+#     geocode(
+#       street = address,
+#       state = state,
+#       postalcode = zip_code,
+#       return_addresses = TRUE,
+#       verbose = TRUE
+#     ) |>
+
+giveaway_test_v2_cleaned <- 
+  giveaway_test_v2_geocoded |> 
+  mutate(
+    lat = coalesce(`lat...18`, `lat...23`),
+    long = coalesce(`long...19`, `long...24`)
+  ) |> 
+  dplyr::select(-`long...24`, -`lat...23`, -zip_code, -`state...21`, -`street...20`, -`long...19`, -`lat...18`, -`street...17`, -`state...10`) |>
+  rename (zip_code = postalcode)
+
+
+#Writing the next Excel
+
+giveaway_test_v2_cleaned |>
+write_csv(paste0("output_data/giveaway_total_v2_bwb_geocoded", Sys.Date(), ".csv"))
+
+#Manual geocode 
+giveaway_total_v3 <-
+  readr::read_csv("output_data/giveaway_total_v2_bwb_geocoded2024-05-13.csv") |>
+  mutate(address = case_when(
+    address == "Monkton Manor Road" ~ NA_character_,
+    address == "9000 Adobe Rd" ~ NA_character_,
+    address == "8900 Tarplys Circle" ~ "8900 Tarplys Cir",
+    address == "8811 Ridgelys Chance Drive" ~ "8811 Ridgelys Chance Dr",
+    address == "8710 Maravoss Lane Road" ~ "8710 Maravoss Ln",
+    address == "8412 Old Hartford Rd" ~ "8412 Old Harford Rd",
+    address == "835 Elendale St" ~ "835 Allendale St",
+    address == "811 Norris Lane Alley" ~ "811 Norris Ln",
+    address == "8100 Oakleigh Rd #2" ~ "8100 Oakleigh Rd",
+    address == "78 North Ritters Ln" ~ "78 Ritters Ln",
+    address == "609 Dunworth Way" ~ "609 Dunwich Way",
+    address == "5459 Hillrise Road" ~ "5459 Hillrise Ave",
+    address == "52 Dungaree Rd" ~ "52 Dungarrie Rd",
+    address == "5113 Kramer Ave" ~ "5113 Kramme Ave",
+    address == "4617 Kings Mill Way" ~ "4617 Kings Mills Way",
+    address == "44 Winters On" ~ "44 Winters Ln",
+    address == "4102 Dutchmill Road" ~ "4102 Dutch Mill Rd",
+    address == "403 Carolina Rod" ~ "403 Carolina Rd",
+    address == "400 Spring Court" ~ "400 Valley Court Rd",
+    address == "3946 Whispering Meadows" ~ "3946 Whispering Meadows Dr",
+    address == "38 Wagoners Lane Alley" ~ "38 Wagners Ln",
+    address == "3120 North Way Dr" ~ "3120 Northway Dr",
+    address == "3 Swan Hill Dr" ~ "3 Swanhill Dr",
+    address == "2906 Edgecombie Cir S" ~ "2906 Edgecombe Cir S",
+    address == "28rhodes Place" ~ "28 Rhodes Pl",
+    address == "2601 Taney Red" ~ "2601 Taney Rd",
+    address == "2409 West 24 Th Street" ~ NA_character_,
+    address == "2224 Tracey's Road" ~ "2224 Traceys Rd",
+    address == "205 S Tyrone Avenue" ~ "205 S Tyrone Rd",
+    address %in% c("18 Fieldstrelam Ct Ct","18 Field Stream Ct") ~ "18 Fieldstream Ct",
+    address == "1514 Applecraft Lane" ~ "1514 Applecroft Ln",
+    address == "1506 Dells Way" ~ "1506 Dellsway Rd",
+    address == "14 Cedar Wood Rd" ~ "14 Cedarwood Rd",
+    address == "13904 Glencroft Ln" ~ "13904 Greencroft Ln",
+    address == "13001A Long Green Pike" ~ "13001 Long Green Pike",
+    address == "11502 St. David's Lane Avenue" ~ "11502 St Davids Ln",
+    address == "112 S Marenick Ave" ~ "112 S Morerick Ave",
+    address == "109 Wapaix Lane" ~ "109 La Paix Ln",
+    address == "109 Melanchthon Ave" ~ "109 Melancthon Ave",
+    address == "10745 Oldcourt Rd" ~ "10745 Old Court Rd",
+    address == "107 Shetland Halls Drive" ~ "107 Shetland Hills Drive",
+    address == "935 Wilmont Ct" ~ "935 Wilmot Ct",
+    TRUE ~ address
+  )) |>
+  mutate(city = case_when(
+    address == "931 Walnut Wood Rd" ~ "Cockeysville",
+    address == "8811 Ridgelys Chance Dr" ~ "Nottingham",
+    address == "8710 Maravoss Ln" ~ "Parkville",
+    address == "44 Winters Ln" ~ "Baltimore",
+    address %in% c("18 Fieldstrelam Ct Ct","18 Field Stream Ct") ~ "Timonium",
+    address == "1514 Applecroft Ln" ~ "Cockeysville",
+    TRUE ~ city
+  )) |>
+  mutate(zip_code = case_when(
+    address == "8500 Allenswood Rd" ~ 21133,
+    address == "835 Allendale St" ~ 21229,
+    TRUE ~ zip_code
+  ))
+
+#Temporary tribble
+
+giveaway_temp_tribble <- 
+  tribble(
+    ~address,                    ~lati,                ~longi,
+"935 Wilmot Ct",           39.29919564874112,    -76.60404435768561, 
+"931 Walnut Wood Road",    39.498735809096544,   -76.64209101349202,
+"8900 Tarplys Cir",        39.34680883269076,    -76.49955344907401,
+"8811 Ridgelys Chance Dr", 39.39342132186161,    -76.49662307116401,
+"8710 Maravoss Ln",        39.37933617896583,    -76.52828459814803,
+"8500 Allenswood Rd",      39.36960784707152,    -76.77239647976198,
+"8412 Old Harford Rd",     39.38555303062436,    -76.54454815092598,
+"835 Allendale St",        39.296766445818996,   -76.67797947791,
+"811 Norris Ln",           39.32572139677791,    -76.45494837116402,
+"8100 Oakleigh Rd",        39.38348979373009,    -76.55897020674601,
+"78 Ritters Ln",           39.42443441237374,    -76.79903381349203,
+"7010 Rock Stream Ct",     39.381432507262424,   -76.68756428650798,
+"609 Dunwich Way",         39.32640014529253,    -76.461027135582,
+"5459 Hillrise Ave",       39.195754433576376,   -76.78896268903728,
+"512 Adobe Rd",            39.370209831290005,   -76.79204881776526,
+"52 Dungarrie Rd",         39.277794456041015,   -76.7229222382411, 
+"5113 Kramme Ave",         39.22449732055259,    -76.60640458964684,
+"4617 Kings Mills Way",    39.39460245587811,    -76.80685562883599,
+"44 Winters Ln",           39.273977353985636,   -76.73714971440846,
+"4102 Dutch Mill Rd",      39.37803025342923,    -76.77164497790997,
+"403 Carolina Rd",         39.397831472372715,   -76.61267107116406,
+"400 Valley Court Rd",     39.41865692598157,    -76.60207123558206,
+"3946 Whispering Meadows Dr", 39.38282760916271, -76.77862749325399,
+"3611 Marriotts Ln",       39.3563607128565,     -76.76244341295,
+"3120 Northway Dr",        39.36262166148309,    -76.54674681452393,
+"3 Swanhill Dr",           39.40118143558796,    -76.69898517791,
+"2906 Edgecombe Cir S",    39.342641538061926,   -76.66358697791,
+"28 Rhodes Pl",            39.43452885398545,    -76.64684853395403,
+"2601 Taney Rd",           39.36658463656031,    -76.6804157127026,
+"2224 Traceys Rd",         39.56874973831017,    -76.72632224412258,
+"205 S Tyrone Rd",         39.38100262795799,    -76.62178984267064,
+"18 Fieldstream Ct",       39.42304586831331,    -76.65184117976197,
+"16500 Jm Pearce Rd",      39.57669631063846,    -76.57971666406134,
+"1514 Applecroft Ln",      39.46181227523126,    -76.69984662363915,
+"1506 Dellsway Rd",        39.3943249838873,     -76.57340622152286,
+"14 Cedarwood Rd",         39.27469345951283,    -76.71543239214827,
+"13904 Greencroft Ln",     39.505522824668994,   -76.68919702871305,
+"13001 Long Green Pike",   39.48033375627031,    -76.4793672566787,
+"11502 St Davids Ln",      39.4384467450158,     -76.68470545412958,
+"112 S Morerick Ave",      39.26212601528163,    -76.76185829251493,
+"109 La Paix Ln",          39.38662345784125,    -76.60815838181398,
+"109 Melancthon Ave",      39.42334576301221,    -76.61957413756005,
+"10745 Old Court Rd",      39.3387678864269,     -76.85804454592795,
+"107 Shetland Hills Drive",39.424965731474785,   -76.6102998514412,
+"38 Wagners Ln",           39.3055101524758, -76.4896187828841
+)
+
+
+```
+
+#County data tribble that will be used in the next step
+```{r}
+county_data <- 
+  tribble(
+  ~city,               ~county,          
+  "Baltimore",         "Baltimore City",
+  "Arbutus",           "Baltimore County", #Census-designated places
+  "Baltimore Highlands","Baltimore County",
+  "Bowley Quarters",   "Baltimore County",
+  "Carney",            "Baltimore County",
+  "Catonsville",       "Baltimore County",  
+  "Dundalk",           "Baltimore County",
+  "Edgemere",          "Baltimore County",  
+  "Essex",             "Baltimore County",  
+  "Garrison",          "Baltimore County",
+  "Hampton",           "Baltimore County",  
+  "Kingsville",        "Baltimore County", 
+  "Lansdowne",         "Baltimore County",
+  "Lochearn",          "Baltimore County",  
+  "Lutherville",       "Baltimore County", 
+  "Mays Chapel",       "Baltimore County",  
+  "Middle River",      "Baltimore County",
+  "Milford Mill",      "Baltimore County",
+  "Overlea",           "Baltimore County",
+  "Owings Mills",      "Baltimore County",
+  "Parkville",         "Baltimore County",
+  "Perry Hall",        "Baltimore County",
+  "Pikesville",        "Baltimore County",
+  "Randallstown",      "Baltimore County",
+  "Reistertown",       "Baltimore County",
+  "Rosdeale",          "Baltimore County",
+  "Rossville",         "Baltimore County",
+  "Timonium",          "Baltimore County",
+  "White Marsh",       "Baltimore County",
+  "Woodlawn",          "Baltimore County", 
+  "Baldwin",           "Baltimore County",  #Unincorporated communtiies
+  "Boring",            "Baltimore County", 
+  "Bradshaw",          "Baltimore County", 
+  "Brooklandville",    "Baltimore County", 
+  "Butler",            "Baltimore County", 
+  "Chase",             "Baltimore County", 
+  "Fork",              "Baltimore County", 
+  "Fort Howard",       "Baltimore County", 
+  "Germantown",        "Baltimore County", 
+  "Glen Arm",          "Baltimore County", 
+  "Glencoe",           "Baltimore County", 
+  "Glyndon",           "Baltimore County", 
+  "Halethorpe",        "Baltimore County", 
+  "Hereford",          "Baltimore County", 
+  "Hunt Valley",       "Baltimore County", 
+  "Hydes",             "Baltimore County", 
+  "Jacksonville",      "Baltimore County", 
+  "Long Green",        "Baltimore County", 
+  "Maryland Line",     "Baltimore County", 
+  "Monkton",           "Baltimore County",
+  "Oeila",             "Baltimore County",
+  "Parkton",           "Baltimore County",
+  "Phoenix",           "Baltimore County",
+  "Ruxton",            "Baltimore County",
+  "Sparks",            "Baltimore County",
+  "Sparrows Point",    "Baltimore County",
+  "Stevenson",         "Baltimore County",
+  "Trump",             "Baltimore County",
+  "Turners Station",   "Baltimore County",
+  "Upper Falls",       "Baltimore County",
+  "Upperco",           "Baltimore County",
+  "White Hall",        "Baltimore County"
+  )
+```
+
+```{r}
+#Restating each Excel
+
+giveaway_test_v1_finished <-
+  read_csv("output_data/giveaway_total_bwb_geocoded2024-04-22.csv") |>
+  filter(!is.na(lat)) |>
+  dplyr::select(-"city...18", -"state...19", -"street", -"zip_code") |>
+  rename(city = "city...9", state = "state...10", "zip_code" = "postalcode") 
+
+giveaway_test_v2_finished <-
+  readr::read_csv("output_data/giveaway_total_v1_bwb_geocoded_2024-04-28.csv") |>
+  filter(!is.na(lat)) |>
+  dplyr::select(-"state...18",-"state...10",-"zip_code",-"street") |>
+  rename("zip_code" = postalcode)
+
+giveaway_total_v3_finished <-
+  giveaway_total_v3 |>
+  left_join(giveaway_temp_tribble, by = "address") |>
+  mutate(lat = coalesce(lat, lati),
+         long = coalesce(long, longi)) |>
+    dplyr::select(-longi, -lati) |>
+  filter(!is.na(lat))
+
+#Creating the final combined geocoded spreadsheet
+
+bwb_giveaway_total <-
+  bind_rows(giveaway_test_v1_finished, giveaway_test_v2_finished, giveaway_total_v3_finished) |>
+  dplyr::select(-county) |>
+  left_join(county_data, by = "city") |>
+  mutate(county = ifelse(is.na(county), "Neither", county)) |>
+  dplyr::select(giveaway_location, year, season, date, common_name, genus_species, itree, address, city,   state,   zip_code, county, first_name, last_name, phone, email, lat, long)
+
+#Writing the CSV
+
+bwb_giveaway_total |>
+write_csv(paste0("output_data/bwb_giveaway_total_final_", Sys.Date(), ".csv"))
+
+```
